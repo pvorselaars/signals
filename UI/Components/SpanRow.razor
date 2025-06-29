@@ -1,0 +1,47 @@
+﻿
+@if (Span.Children.Any())
+{
+<tr @onclick="Toggle" style="cursor:pointer; padding-left:@(Level * 20)px;">
+    <td>
+        @Span.Name
+    </td>
+    <td >
+        @Span.Scope
+    </td>
+    <td>
+        @((Span.EndTime - Span.StartTime).TotalMilliseconds) ms
+    </td>
+</tr>
+} else {
+<tr style="padding-left:@(Level * 20)px;">
+    <td >
+        @Span.Name
+    </td>
+    <td >
+        @Span.Scope
+    </td>
+    <td>
+        @((Span.EndTime - Span.StartTime).TotalMilliseconds) ms
+    </td>
+</tr>
+}
+
+@if (Expanded)
+{
+    @foreach (var child in Span.Children)
+    {
+        <SpanRow Span="child" Level="Level + 1" />
+    }
+}
+
+@code {
+    [Parameter] public Span Span { get; set; } = default!;
+    [Parameter] public int Level { get; set; } = 0;
+
+    bool Expanded { get; set; } = false;
+
+    void Toggle()
+    {
+        Expanded = !Expanded;
+    }
+}

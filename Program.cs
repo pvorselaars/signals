@@ -33,12 +33,14 @@ builder.Services.AddOpenTelemetry()
                 .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation(options =>
                 {
                     options.Filter = httpContext =>
-                {
-                    var path = httpContext.Request.Path.ToString();
-                    return !path.StartsWith("/opentelemetry") && !path.StartsWith("/_framework");
-                };
+                    {
+                        var path = httpContext.Request.Path.ToString();
+                        return !path.StartsWith("/opentelemetry") && !path.StartsWith("/_framework");
+                    };
                 }
-                ).AddOtlpExporter());
+                )
+                .AddEntityFrameworkCoreInstrumentation()
+                .AddOtlpExporter());
 
 builder.Services.AddDbContext<TracesDbContext>(options =>
     options.UseSqlite("Data Source=signals.db"));

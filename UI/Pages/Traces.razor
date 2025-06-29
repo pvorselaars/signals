@@ -1,45 +1,44 @@
 ﻿@page "/traces"
+@rendermode InteractiveServer
 @attribute [StreamRendering]
 @using Microsoft.EntityFrameworkCore
-@using Signals.Traces
 @inject TracesDbContext Db
 
 <PageTitle>Traces</PageTitle>
 
-@if (spans == null)
+@if (traces == null)
 {
-    <p><em>Loading...</em></p>
+    <progress />
 }
 else
 {
     <table class="table">
         <thead>
             <tr>
-                <th>ID</th>
-                <th>Parent</th>
                 <th>Name</th>
-                <th>Timestamp</th>
+                <th>Scope</th>
+                <th>Duration</th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var span in spans)
+            @foreach (var trace in traces)
             {
-                <tr>
-                    <td>@span.Id</td>
-                    <td>@span.ParentId</td>
-                    <td>@span.Name</td>
-                    <td>@span.StartTime</td>
-                </tr>
+                <SpanRow Span="trace" Level="0" />
             }
         </tbody>
     </table>
 }
 
 @code {
-    private List<Span>? spans;
+    private List<Span>? traces;
 
     protected override async Task OnInitializedAsync()
     {
-        spans = await Db.Traces.OrderByDescending(trace => trace.StartTime).Take(10).ToListAsync();
+        traces = await Db.Traces
+                         .Where(trace => trace.ParentSpanId == null)
+                         .Include(trace => trace.Children)
+                         .OrderByDescending(trace => trace.StartTime)
+                         .Take(10)
+                         .ToListAsync();
     }
 }

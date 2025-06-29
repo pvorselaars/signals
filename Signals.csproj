@@ -21,6 +21,7 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.12.0" />
     <PackageReference Include="Grpc.AspNetCore" Version="2.61.0" />
     <PackageReference Include="Google.Protobuf" Version="3.25.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.12.0-beta.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -28,10 +29,6 @@
     <Protobuf Include="Protos/OpenTelemetry/opentelemetry/proto/trace/v1/trace.proto" GrpcServices="Server" ProtoRoot="Protos/OpenTelemetry" AdditionalImportDirs="Protos/OpenTelemetry" />
     <Protobuf Include="Protos/OpenTelemetry/opentelemetry/proto/common/v1/common.proto" GrpcServices="Server" ProtoRoot="Protos/OpenTelemetry" AdditionalImportDirs="Protos/OpenTelemetry" />
     <Protobuf Include="Protos/OpenTelemetry/opentelemetry/proto/resource/v1/resource.proto" GrpcServices="Server" ProtoRoot="Protos/OpenTelemetry" AdditionalImportDirs="Protos/OpenTelemetry" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Remove="*.db-wal" />
   </ItemGroup>
 
 </Project>
