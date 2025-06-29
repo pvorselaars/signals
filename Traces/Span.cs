@@ -15,6 +15,7 @@ public class Span(string traceId, string spanId, string? parentSpanId, string na
     public string Scope { get; set; } = scope;
     public DateTime StartTime { get; set; } = startTime;
     public DateTime EndTime { get; set; } = endTime;
+    public TimeSpan Duration => EndTime - StartTime;
 
     public Span? Parent { get; set; }
     public List<Span> Children { get; set; } = [];

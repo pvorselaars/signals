@@ -17,13 +17,14 @@ else
             <tr>
                 <th>Name</th>
                 <th>Scope</th>
-                <th>Duration</th>
+                <th>Start</th>
+                <th>Duration (ms)</th>
             </tr>
         </thead>
         <tbody>
             @foreach (var trace in traces)
             {
-                <SpanRow Span="trace" Level="0" />
+                <SpanRow Span="trace" Level="1" />
             }
         </tbody>
     </table>

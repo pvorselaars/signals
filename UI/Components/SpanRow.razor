@@ -1,27 +1,33 @@
 ﻿
 @if (Span.Children.Any())
 {
-<tr @onclick="Toggle" style="cursor:pointer; padding-left:@(Level * 20)px;">
-    <td>
+<tr @onclick="Toggle" style="cursor:pointer;">
+    <td style="padding-left:@(Level * 20)px;">
         @Span.Name
     </td>
     <td >
         @Span.Scope
     </td>
     <td>
-        @((Span.EndTime - Span.StartTime).TotalMilliseconds) ms
+        @Span.StartTime.ToString("dd-MM HH:mm:ss.fff")
+    </td>
+    <td>
+        @Span.Duration.TotalMilliseconds
     </td>
 </tr>
 } else {
-<tr style="padding-left:@(Level * 20)px;">
-    <td >
+<tr>
+    <td style="padding-left:@(Level * 20)px;">
         @Span.Name
     </td>
     <td >
         @Span.Scope
     </td>
     <td>
-        @((Span.EndTime - Span.StartTime).TotalMilliseconds) ms
+        @Span.StartTime.ToString("dd-MM HH:mm:ss.fff")
+    </td>
+    <td>
+        @Span.Duration.TotalMilliseconds
     </td>
 </tr>
 }
