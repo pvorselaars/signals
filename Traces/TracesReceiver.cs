@@ -28,17 +28,7 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
 
                 foreach (var span in scopeSpan.Spans)
                 {
-                    var traceId = span.TraceId.ToBase64();
-                    var spanId = span.SpanId.ToBase64();
-                    var parentSpanId = span.ParentSpanId.Length > 0 ? span.ParentSpanId.ToBase64() : null;
-
-                    var epoch = DateTimeOffset.FromUnixTimeSeconds(0);
-                    var start = epoch.AddTicks((long)span.StartTimeUnixNano / 100).UtcDateTime;
-                    var end = epoch.AddTicks((long)span.EndTimeUnixNano / 100).UtcDateTime;
-
-                    var newSpan = new Span(traceId, spanId, parentSpanId, span.Name, span.Kind, start, end);
-                    newSpan.Scope = scope;
-                    spanMap[spanId] = newSpan;
+                    spanMap[span.SpanId.ToBase64()] = Span.FromProto(span, scope);
                 }
             }
         }
