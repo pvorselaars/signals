@@ -3,9 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Proto.Collector.Trace.V1;
 
 namespace Signals.Traces;
-public class TracesReceiver(TracesDbContext db) : TraceService.TraceServiceBase
+public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
 {
-    private readonly TracesDbContext _db = db;
+    private readonly SignalsDbContext _db = db;
 
     public override async Task<ExportTraceServiceResponse> Export(
         ExportTraceServiceRequest request,

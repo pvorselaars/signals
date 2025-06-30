@@ -42,7 +42,7 @@ builder.Services.AddOpenTelemetry()
                 .AddEntityFrameworkCoreInstrumentation()
                 .AddOtlpExporter());
 
-builder.Services.AddDbContext<TracesDbContext>(options =>
+builder.Services.AddDbContext<SignalsDbContext>(options =>
     options.UseSqlite("Data Source=signals.db"));
 
 StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
@@ -51,7 +51,7 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<TracesDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<SignalsDbContext>();
     db.Database.EnsureCreated();
 }
 

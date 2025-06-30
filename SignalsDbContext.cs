@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Signals.Traces;
 
-namespace Signals.Traces;
-public class TracesDbContext(DbContextOptions<TracesDbContext> options) : DbContext(options)
+public class SignalsDbContext(DbContextOptions<SignalsDbContext> options) : DbContext(options)
 {
     public DbSet<Span> Traces { get; set; }
-    
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
