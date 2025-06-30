@@ -19,11 +19,9 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
             {
                 foreach (var span in scopeSpan.Spans)
                 {
-                    var traceId = Convert.ToBase64String(span.TraceId.ToByteArray());
-                    var spanId = Convert.ToBase64String(span.SpanId.ToByteArray());
-                    var parentSpanId = span.ParentSpanId.Length > 0
-                        ? Convert.ToBase64String(span.ParentSpanId.ToByteArray())
-                        : null;
+                    var traceId = span.TraceId.ToBase64();
+                    var spanId = span.SpanId.ToBase64();
+                    var parentSpanId = span.ParentSpanId.Length > 0 ? span.ParentSpanId.ToBase64() : null;
 
                     var epoch = DateTimeOffset.FromUnixTimeSeconds(0);
                     var start = epoch.AddTicks((long)span.StartTimeUnixNano / 100).UtcDateTime;
