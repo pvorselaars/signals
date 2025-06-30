@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.EntityFrameworkCore;
 using Signals.UI;
 using Signals.Traces;
+using Signals;
 
 var builder = WebApplication.CreateBuilder(args);
 
