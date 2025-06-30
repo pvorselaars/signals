@@ -1,0 +1,28 @@
+﻿@page "/resources"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@using Microsoft.EntityFrameworkCore
+@inject SignalsDbContext Db
+
+<PageTitle>Resources</PageTitle>
+
+@if (resources == null)
+{
+    <progress />
+}
+else
+{
+    @foreach (var resource in resources)
+    {
+        @resource.Name
+    }
+}
+
+@code {
+    private List<Resource>? resources;
+
+    protected override async Task OnInitializedAsync()
+    {
+        resources = await Db.Resources.ToListAsync();
+    }
+}

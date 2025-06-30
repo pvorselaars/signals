@@ -14,11 +14,21 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
 
         foreach (var resourceSpan in request.ResourceSpans)
         {
-            var span = await ResourceSpan.FromProto(resourceSpan, _db);
-            _db.ResourceSpans.Add(span);
+            await _db.AddResourceAsync(resourceSpan.Resource);
         }
 
-        await _db.SaveChangesAsync();
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            Console.WriteLine("Database update exception:");
+            Console.WriteLine(ex.Message);
+            if (ex.InnerException != null)
+                Console.WriteLine(ex.InnerException.Message);
+        }
+
 
         return new ExportTraceServiceResponse();
     }

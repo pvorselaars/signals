@@ -2,18 +2,32 @@ using Microsoft.EntityFrameworkCore;
 using Signals.Traces;
 
 namespace Signals;
+
 public class SignalsDbContext(DbContextOptions<SignalsDbContext> options) : DbContext(options)
 {
-    public DbSet<ResourceSpan> ResourceSpans { get; set; }
+    public DbSet<Resource> Resources { get; set; }
     public DbSet<Traces.Attribute> Attributes { get; set; }
+    public DbSet<AttributeKey> Keys { get; set; }
+    public DbSet<AttributeValue> Values { get; set; }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder) {
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<ResourceSpan>()
-            .HasMany(s => s.Attributes)
-            .WithMany(r => r.ResourceSpans);
+        modelBuilder.Entity<Resource>()
+            .HasMany(r => r.Attributes)
+            .WithMany(a => a.Resources);
 
     }
+
+    public async Task AddResourceAsync(OpenTelemetry.Proto.Resource.V1.Resource resource)
+    {
+        var entity = await Resource.FromProto(resource, this);
+        if (entity.Id == 0)
+        {
+            Resources.Add(entity);
+        }
+    }
 }
+
     
