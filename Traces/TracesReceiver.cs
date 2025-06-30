@@ -17,6 +17,15 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
         {
             foreach (var scopeSpan in resourceSpan.ScopeSpans)
             {
+                var scope = _db.Scopes
+                    .FirstOrDefault(s => s.Name == scopeSpan.Scope.Name && s.Version == scopeSpan.Scope.Version);
+
+                if (scope == null)
+                {
+                    scope = new Scope(scopeSpan.Scope.Name, scopeSpan.Scope.Version, scopeSpan.SchemaUrl);
+                    _db.Scopes.Add(scope);
+                }
+
                 foreach (var span in scopeSpan.Spans)
                 {
                     var traceId = span.TraceId.ToBase64();
@@ -27,9 +36,8 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
                     var start = epoch.AddTicks((long)span.StartTimeUnixNano / 100).UtcDateTime;
                     var end = epoch.AddTicks((long)span.EndTimeUnixNano / 100).UtcDateTime;
 
-                    var scope = scopeSpan.Scope.Name;
-
-                    var newSpan = new Span(traceId, spanId, parentSpanId, span.Name, scope, span.Kind, start, end);
+                    var newSpan = new Span(traceId, spanId, parentSpanId, span.Name, span.Kind, start, end);
+                    newSpan.Scope = scope;
                     spanMap[spanId] = newSpan;
                 }
             }

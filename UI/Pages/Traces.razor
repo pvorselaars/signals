@@ -38,6 +38,7 @@ else
         traces = await Db.Traces
                          .Where(trace => trace.ParentSpanId == null)
                          .Include(trace => trace.Children)
+                         .Include(trace => trace.Scope)
                          .OrderByDescending(trace => trace.StartTime)
                          .Take(10)
                          .ToListAsync();
