@@ -31,7 +31,7 @@ public class TracesReceiver(TracesDbContext db) : TraceService.TraceServiceBase
 
                     var scope = scopeSpan.Scope.Name;
 
-                    var newSpan = new Span(traceId, spanId, parentSpanId, span.Name, scope, span.Kind.ToString(), start, end);
+                    var newSpan = new Span(traceId, spanId, parentSpanId, span.Name, scope, span.Kind, start, end);
                     spanMap[spanId] = newSpan;
                 }
             }

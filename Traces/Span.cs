@@ -1,8 +1,9 @@
 using System.ComponentModel.DataAnnotations;
+using static OpenTelemetry.Proto.Trace.V1.Span.Types;
 
 namespace Signals.Traces;
 
-public class Span(string traceId, string spanId, string? parentSpanId, string name, string scope, string kind, DateTime startTime, DateTime endTime)
+public class Span(string traceId, string spanId, string? parentSpanId, string name, string scope, SpanKind kind, DateTime startTime, DateTime endTime)
 {
     [Key]
     public string SpanId { get; set; } = spanId;
@@ -20,5 +21,5 @@ public class Span(string traceId, string spanId, string? parentSpanId, string na
     public Span? Parent { get; set; }
     public List<Span> Children { get; set; } = [];
 
-    public string Kind { get; set; } = kind;
+    public SpanKind Kind { get; set; } = kind;
 }
