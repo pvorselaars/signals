@@ -12,34 +12,19 @@
 }
 else
 {
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Scope</th>
-                <th>Start</th>
-                <th>Duration (ms)</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var trace in traces)
-            {
-                <SpanRow Span="trace" Level="1" />
-            }
-        </tbody>
-    </table>
+    @foreach (var trace in traces)
+    {
+        <Span ResourceSpan="trace" />
+    }
 }
 
 @code {
-    private List<Span>? traces;
+    private List<ResourceSpan>? traces;
 
     protected override async Task OnInitializedAsync()
     {
-        traces = await Db.Traces
-                         .Where(trace => trace.ParentSpanId == null)
-                         .Include(trace => trace.Children)
-                         .Include(trace => trace.Scope)
-                         .OrderByDescending(trace => trace.StartTime)
+        traces = await Db.ResourceSpans
+                         .Include(span => span.Attributes)
                          .Take(10)
                          .ToListAsync();
     }

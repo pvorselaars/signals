@@ -4,21 +4,16 @@ using Signals.Traces;
 namespace Signals;
 public class SignalsDbContext(DbContextOptions<SignalsDbContext> options) : DbContext(options)
 {
-    public DbSet<Scope> Scopes { get; set; }
-    public DbSet<Span> Traces { get; set; }
+    public DbSet<ResourceSpan> ResourceSpans { get; set; }
+    public DbSet<Traces.Attribute> Attributes { get; set; }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
+    protected override void OnModelCreating(ModelBuilder modelBuilder) {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Span>()
-            .HasOne(s => s.Parent)
-            .WithMany(s => s.Children)
-            .HasForeignKey(s => s.ParentSpanId)
-            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ResourceSpan>()
+            .HasMany(s => s.Attributes)
+            .WithMany(r => r.ResourceSpans);
 
-        modelBuilder.Entity<Span>()
-            .HasOne(s => s.Scope);
     }
 }
     
