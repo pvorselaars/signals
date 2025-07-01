@@ -20,13 +20,20 @@ public class SignalsDbContext(DbContextOptions<SignalsDbContext> options) : DbCo
 
     }
 
-    public async Task AddResourceAsync(OpenTelemetry.Proto.Resource.V1.Resource resource)
+    public async Task AddResourceSpansAsync(OpenTelemetry.Proto.Trace.V1.ResourceSpans[] protoResourceSpans)
     {
-        var entity = await Resource.FromProto(resource, this);
-        if (entity.Id == 0)
+
+        var tasks = protoResourceSpans.Select(async span =>
         {
-            Resources.Add(entity);
-        }
+            var entity = await Resource.FromProto(span, this);
+            if (entity.Id == 0)
+            {
+                Resources.Add(entity);
+            }
+        });
+
+        await Task.WhenAll(tasks);
+
     }
 }
 

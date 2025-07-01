@@ -30,7 +30,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddOpenTelemetry()
-                .ConfigureResource(resource => resource.AddService("Signals"))
+                .ConfigureResource(resource => resource.AddService(serviceName: "Signals", serviceVersion: "0.0.1", serviceInstanceId: Guid.Empty.ToString()))
                 .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation(options =>
                 {
                     options.Filter = httpContext =>

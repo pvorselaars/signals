@@ -1,9 +1,8 @@
-using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 
 namespace Signals.Traces;
 
-public class Attribute 
+public class Attribute
 {
     public int Id { get; set; }
 
@@ -13,9 +12,16 @@ public class Attribute
     public int ValueId { get; set; }
     public AttributeValue Value { get; set; } = default!;
 
-    public ICollection<Resource> Resources { get; set; } = [];
     public static async Task<Attribute> FromProtoAsync(OpenTelemetry.Proto.Common.V1.KeyValue protoAttribute, SignalsDbContext db)
     {
+
+        var key = await AttributeKey.FromProto(protoAttribute, db);
+        var value = await AttributeValue.FromProtoAsync(protoAttribute, db);
+
+        var attribute = await db.Attributes.Where(a => a.Key == key && a.Value == value).FirstOrDefaultAsync();
+
+        if (attribute != null)
+            return attribute;
 
         return new Attribute
         {
@@ -23,12 +29,23 @@ public class Attribute
             Value = await AttributeValue.FromProtoAsync(protoAttribute, db),
         };
     }
+
+    public override string ToString() => $"{Key.Key}: {Value.Value}";
 }
 
 public class ResourceAttribute : Attribute
 {
-    public int ResourceId { get; set; }
-    public Resource Resource { get; set; } = default!;
+    public ICollection<Resource> Resources { get; set; } = default!;
+
+    public static ResourceAttribute FromAttribute(Attribute attribute)
+    {
+        return new ResourceAttribute
+        {
+            Key = attribute.Key,
+            Value = attribute.Value
+        };
+    }
+
 }
 
 public class AttributeKey

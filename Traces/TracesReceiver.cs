@@ -12,10 +12,7 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
         ServerCallContext context)
     {
 
-        foreach (var resourceSpan in request.ResourceSpans)
-        {
-            await _db.AddResourceAsync(resourceSpan.Resource);
-        }
+        await _db.AddResourceSpansAsync([.. request.ResourceSpans]);
 
         try
         {

@@ -1,5 +1,4 @@
 ﻿@page "/resources"
-@rendermode InteractiveServer
 @attribute [StreamRendering]
 @using Microsoft.EntityFrameworkCore
 @inject SignalsDbContext Db
@@ -14,7 +13,12 @@ else
 {
     @foreach (var resource in resources)
     {
-        @resource.Name
+        @foreach (var a in resource.Attributes)
+        {
+            @a<br>
+        }
+        <span>last.signal: @resource.LastSignal.ToString("yyyy-dd-MM HH:mm:ss.fff")</span>
+        <hr>
     }
 }
 
@@ -23,6 +27,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        resources = await Db.Resources.ToListAsync();
+        resources = await Db.Resources
+                             .Include(r => r.Attributes)
+                                .ThenInclude(a => a.Key)
+                             .Include(r => r.Attributes)
+                                .ThenInclude(a => a.Value)
+                             .ToListAsync();
     }
 }
