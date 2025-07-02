@@ -14,8 +14,6 @@ End-to-end observability in a single app:
 
 All in one process — no collector, no external storage, no dependencies.
 
-
-
 * ✅ Built-in **OTLP/gRPC receiver**
 * 🧬 Uses **OpenTelemetry protobufs** directly (no intermediary SDKs)
 * 📦 Stores data via **Entity Framework Core + SQLite**
@@ -60,13 +58,6 @@ The `.proto` files are compiled into C# classes during build using `Grpc.Tools`.
 * Schema auto-created or updated via migrations
 
 Database path: `./signals.db` 
-
-## 📊 UI Capabilities
-
-* 🔍 **Trace Viewer** with filtering by service, operation, or time range
-* 📄 **Logs Explorer** with severity filtering
-* 📈 **Metrics Dashboard** (basic; extensible)
-* 🧪 Live telemetry preview (optionally real-time)
 
 ## 🔒 Security
 
