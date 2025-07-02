@@ -1,0 +1,37 @@
+﻿@page "/scopes"
+@attribute [StreamRendering]
+@inject SignalsDbContext Db
+
+<PageTitle>Scopes</PageTitle>
+
+@if (scopes == null)
+{
+    <progress />
+}
+else
+{
+    @foreach (var scope in scopes)
+    {
+        <span>name: @scope.Name<br></span>
+        <span>version: @scope.Version<br></span>
+        @foreach (var a in scope.Attributes)
+        {
+            @a<br>
+        }
+        <hr>
+    }
+}
+
+@code {
+    private List<Scope>? scopes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        scopes = await Db.Scopes
+                            .Include(r => r.Attributes)
+                            .ThenInclude(a => a.Key)
+                            .Include(r => r.Attributes)
+                            .ThenInclude(a => a.Value)
+                            .ToListAsync();
+    }
+}

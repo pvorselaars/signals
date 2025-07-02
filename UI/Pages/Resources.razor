@@ -1,6 +1,5 @@
 ﻿@page "/resources"
 @attribute [StreamRendering]
-@using Microsoft.EntityFrameworkCore
 @inject SignalsDbContext Db
 
 <PageTitle>Resources</PageTitle>
@@ -17,7 +16,8 @@ else
         {
             @a<br>
         }
-        <span>last.signal: @resource.LastSignal.ToString("yyyy-dd-MM HH:mm:ss.fff")</span>
+        <span>signal.first: @resource.FirstSignal.ToString("yyyy-dd-MM HH:mm:ss.fff")<br></span>
+        <span>signal.last:  @resource.LastSignal.ToString("yyyy-dd-MM HH:mm:ss.fff")<br></span>
         <hr>
     }
 }

@@ -6,7 +6,8 @@ public class Resource
 {
     public int Id { get; set; }
 
-    public DateTime LastSignal { get; set; }
+    public DateTime LastSignal { get; set; } = DateTime.UtcNow;
+    public DateTime FirstSignal { get; set; } = DateTime.UtcNow;
     public ICollection<ResourceAttribute> Attributes { get; set; } = [];
 
     public static async Task<Resource> FromProto(OpenTelemetry.Proto.Trace.V1.ResourceSpans protoResourceSpan, SignalsDbContext db)
@@ -36,7 +37,6 @@ public class Resource
 
             return new Resource
             {
-                LastSignal = DateTime.UtcNow,
                 Attributes = [.. attributes.Select(ResourceAttribute.FromAttribute)]
             };
         }
@@ -58,7 +58,6 @@ public class Resource
 
             return new Resource
             {
-                LastSignal = DateTime.UtcNow,
                 Attributes = [.. attributes.Select(ResourceAttribute.FromAttribute)]
             };
         }
@@ -66,7 +65,6 @@ public class Resource
         {
             return new Resource
             {
-                LastSignal = DateTime.UtcNow,
                 Attributes = [.. attributes.Select(ResourceAttribute.FromAttribute)]
             };
         }

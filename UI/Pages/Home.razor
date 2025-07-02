@@ -4,7 +4,7 @@
 
 <PageTitle>Signals</PageTitle>
 
-@if (services == null || resources == null)
+@if (services == null || resources == null || scopes == null)
 {
     <progress />
 }
@@ -13,12 +13,14 @@ else
     <div class="grid">
         <div>Services: @services.Count</div>
         <div>Resources: @resources.Count</div>
+        <div>Scopes: @scopes.Count</div>
     </div>
 }
 
 @code {
     private List<Traces.Attribute>? services;
-    private List<Traces.Attribute>? resources;
+    private List<Resource>? resources;
+    private List<Scope>? scopes;
 
     protected override async Task OnInitializedAsync()
     {
@@ -30,12 +32,10 @@ else
                            .Select(g => g.First())
                            .ToListAsync();
 
-        resources = await Db.Attributes
-                            .Include(a => a.Key)
-                            .Include(a => a.Value)
-                            .Where(a => a.Key.Key == "service.instance.id")
-                            .GroupBy(a => a.Value.Value)
-                            .Select(g => g.First())
+        resources = await Db.Resources
                             .ToListAsync();
+
+        scopes = await Db.Scopes
+                         .ToListAsync();
     }
 }

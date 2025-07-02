@@ -48,6 +48,21 @@ public class ResourceAttribute : Attribute
 
 }
 
+public class ScopeAttribute : Attribute
+{
+    public ICollection<Scope> Scopes { get; set; } = default!;
+
+    public static ScopeAttribute FromAttribute(Attribute attribute)
+    {
+        return new ScopeAttribute
+        {
+            Key = attribute.Key,
+            Value = attribute.Value
+        };
+    }
+
+}
+
 public class AttributeKey
 {
     public int Id { get; set; }

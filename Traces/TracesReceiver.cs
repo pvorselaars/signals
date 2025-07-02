@@ -12,7 +12,7 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
         ServerCallContext context)
     {
 
-        await _db.AddResourceSpansAsync([.. request.ResourceSpans]);
+        await AddResourceSpansAsync([.. request.ResourceSpans]);
 
         try
         {
@@ -26,7 +26,37 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
                 Console.WriteLine(ex.InnerException.Message);
         }
 
-
         return new ExportTraceServiceResponse();
+    }
+    
+    private async Task AddResourceSpansAsync(OpenTelemetry.Proto.Trace.V1.ResourceSpans[] protoResourceSpans)
+    {
+
+        var tasks = protoResourceSpans.Select(async span =>
+        {
+            var entity = await Resource.FromProto(span, _db);
+            if (entity.Id == 0)
+            {
+                _db.Resources.Add(entity);
+            }
+
+            await AddScopeSpansAsync([.. span.ScopeSpans]);
+        });
+
+        await Task.WhenAll(tasks);
+    }
+
+    public async Task AddScopeSpansAsync(OpenTelemetry.Proto.Trace.V1.ScopeSpans[] protoScopeSpans)
+    {
+        var tasks = protoScopeSpans.Select(async span =>
+        {
+            var entity = await Scope.FromProto(span, _db);
+            if (entity.Id == 0)
+            {
+                _db.Scopes.Add(entity);
+            }
+        });
+
+        await Task.WhenAll(tasks);
     }
 }
