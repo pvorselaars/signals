@@ -4,9 +4,7 @@
 
 It uses the official [**OpenTelemetry protobuf definitions**](https://github.com/open-telemetry/opentelemetry-proto) for decoding and processing telemetry data, with no need for an external collector.
 
-## 📡 Overview
-
-**Signals** enables end-to-end observability in a single app:
+End-to-end observability in a single app:
 
 * 📥 **Receives telemetry** (traces, metrics, logs) over OTLP/gRPC
 * 🧠 **Parses OTLP messages** using the official **OpenTelemetry proto files**
@@ -16,7 +14,7 @@ It uses the official [**OpenTelemetry protobuf definitions**](https://github.com
 
 All in one process — no collector, no external storage, no dependencies.
 
-## 🧩 Key Features
+
 
 * ✅ Built-in **OTLP/gRPC receiver**
 * 🧬 Uses **OpenTelemetry protobufs** directly (no intermediary SDKs)
@@ -49,7 +47,7 @@ dotnet run
 
 Signals uses the **OpenTelemetry Protocol (OTLP) protobuf definitions** to:
 
-* Implement the `TraceService`, `MetricsService`, and `LogsService` gRPC interfaces
+* Implement the `TraceService`, `MetricsService`*, and `LogsService` gRPC interfaces (see roadmap)
 * Deserialize incoming telemetry payloads directly from the wire
 * Convert raw proto messages into internal EF Core models
 
@@ -77,12 +75,21 @@ Signals is currently usable for **local development and prototyping**. gRPC endp
 * Restrict access with reverse proxies or firewalls
 * Implement gRPC-level authentication (e.g., mTLS or auth interceptors)
 
-## 📜 License
-
-MIT License
-
 ## ✅ Roadmap
 
-* [ ] Alerts
-* [ ] Metrics
-* [ ] Logs
+- [ ] Span visualizer
+- [ ] Alerts
+- [ ] Metrics
+- [ ] Logs
+
+## 📄 License
+
+This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+
+## 🤝 Contributing
+
+Contributions, suggestions, and issues are welcome. Please open a PR or file an issue in GitHub.
+
+## 📬 Contact
+
+Questions? Reach out on GitHub or submit an issue.
