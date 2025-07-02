@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace Signals.Traces;
+namespace Signals.Common;
 
 public class Attribute
 {
@@ -58,7 +58,7 @@ public class ResourceAttribute : Attribute
 
 public class ScopeAttribute : Attribute
 {
-    public ICollection<Scope> Scopes { get; set; } = default!;
+    public ICollection<InstrumentationScope> Scopes { get; set; } = default!;
 
     public static ScopeAttribute FromAttribute(Attribute attribute)
     {
@@ -73,7 +73,7 @@ public class ScopeAttribute : Attribute
 
 public class SpanAttribute : Attribute
 {
-    public ICollection<Span> Spans { get; set; } = default!;
+    public ICollection<Trace.Span> Spans { get; set; } = default!;
 
     public static SpanAttribute FromAttribute(Attribute attribute)
     {

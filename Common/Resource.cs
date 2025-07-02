@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace Signals.Traces;
+namespace Signals.Common;
 
 public class Resource
 {
@@ -10,7 +10,7 @@ public class Resource
     public DateTime FirstSignal { get; set; } = DateTime.UtcNow;
     public ICollection<ResourceAttribute> Attributes { get; set; } = [];
 
-    public static async Task<Resource> FromProto(OpenTelemetry.Proto.Trace.V1.ResourceSpans protoResourceSpan, SignalsDbContext db)
+    public static async Task<Resource> FromProtoAsync(OpenTelemetry.Proto.Trace.V1.ResourceSpans protoResourceSpan, SignalsDbContext db)
     {
 
         var attributeTasks = protoResourceSpan.Resource.Attributes.Select(a => Attribute.FromProtoAsync(a, db));

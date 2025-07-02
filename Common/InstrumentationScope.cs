@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace Signals.Traces;
+namespace Signals.Common;
 
-public class Scope
+public class InstrumentationScope
 {
     public int Id { get; set; }
 
@@ -12,10 +12,10 @@ public class Scope
     
     public ICollection<ScopeAttribute> Attributes { get; set; } = [];
     
-    public static async Task<Scope> FromProto(OpenTelemetry.Proto.Trace.V1.ScopeSpans protoScopeSpan, SignalsDbContext db)
+    public static async Task<InstrumentationScope> FromProtoAsync(OpenTelemetry.Proto.Trace.V1.ScopeSpans protoScopeSpan, SignalsDbContext db)
     {
 
-        var existingScope = await db.Set<Scope>()
+        var existingScope = await db.Scopes
             .Where(s => s.Name == protoScopeSpan.Scope.Name && s.Version == protoScopeSpan.Scope.Version)
             .FirstOrDefaultAsync();
 
@@ -25,7 +25,7 @@ public class Scope
         var attributeTasks = protoScopeSpan.Scope.Attributes.Select(a => Attribute.FromProtoAsync(a, db));
         var attributes = await Task.WhenAll(attributeTasks);
         
-        return new Scope
+        return new InstrumentationScope
         {
             Name = protoScopeSpan.Scope.Name,
             Version = protoScopeSpan.Scope.Version,

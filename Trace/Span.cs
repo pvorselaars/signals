@@ -1,4 +1,6 @@
-namespace Signals.Traces;
+using Signals.Common;
+
+namespace Signals.Trace;
 
 public class Span
 {
@@ -21,7 +23,7 @@ public class Span
 
     public static async Task<Span> FromProto(OpenTelemetry.Proto.Trace.V1.Span protoSpan, SignalsDbContext db)
     {
-        var attributeTasks = protoSpan.Attributes.Select(a => Attribute.FromProtoAsync(a, db));
+        var attributeTasks = protoSpan.Attributes.Select(a => Common.Attribute.FromProtoAsync(a, db));
         var attributes = await Task.WhenAll(attributeTasks);
 
         var epoch = DateTimeOffset.FromUnixTimeSeconds(0);

@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.EntityFrameworkCore;
 using Signals.UI;
-using Signals.Traces;
+using Signals.Trace;
 using Signals;
 
 var builder = WebApplication.CreateBuilder(args);

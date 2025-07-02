@@ -1,8 +1,9 @@
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Proto.Collector.Trace.V1;
+using Signals.Common;
 
-namespace Signals.Traces;
+namespace Signals.Trace;
 
 public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
 {
@@ -35,7 +36,7 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
 
         var tasks = protoResourceSpans.Select(async span =>
         {
-            var entity = await Resource.FromProto(span, _db);
+            var entity = await Resource.FromProtoAsync(span, _db);
             if (entity.Id == 0)
             {
                 _db.Resources.Add(entity);
@@ -51,7 +52,7 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
     {
         var tasks = protoScopeSpans.Select(async span =>
         {
-            var entity = await Scope.FromProto(span, _db);
+            var entity = await InstrumentationScope.FromProtoAsync(span, _db);
             if (entity.Id == 0)
             {
                 _db.Scopes.Add(entity);
