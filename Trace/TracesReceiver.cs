@@ -66,12 +66,10 @@ public class TracesReceiver(SignalsDbContext db) : TraceService.TraceServiceBase
 
     private async Task AddSpansAsync(OpenTelemetry.Proto.Trace.V1.Span[] protoSpans)
     {
-        var tasks = protoSpans.Select(async span =>
-        {
-            var entity = await Span.FromProto(span, _db);
-            _db.Spans.Add(entity);
-        });
 
-        await Task.WhenAll(tasks);
+        var tasks = protoSpans.Select(async span => await Span.FromProtoAsync(span, _db));
+        var spans = await Task.WhenAll(tasks);
+
+        _db.Spans.AddRange(spans);
     }
 }
