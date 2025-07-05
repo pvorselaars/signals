@@ -1,37 +1,30 @@
 ﻿@page "/resources"
-@attribute [StreamRendering]
-@inject SignalsDbContext Db
+@inject Store store
 
 <PageTitle>Resources</PageTitle>
 
-@if (resources == null)
+@foreach (var resource in store.Resources)
 {
-    <progress />
-}
-else
-{
-    @foreach (var resource in resources)
+    @foreach (var a in resource.Value)
     {
-        @foreach (var a in resource.Attributes)
-        {
-            @a<br>
-        }
-        <span>signal.first: @resource.FirstSignal.ToString("yyyy-dd-MM HH:mm:ss.fff")<br></span>
-        <span>signal.last:  @resource.LastSignal.ToString("yyyy-dd-MM HH:mm:ss.fff")<br></span>
-        <hr>
+        @a<br>
     }
+    <hr>
 }
 
 @code {
-    private List<Resource>? resources;
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        resources = await Db.Resources
-                             .Include(r => r.Attributes)
-                                .ThenInclude(a => a.Key)
-                             .Include(r => r.Attributes)
-                                .ThenInclude(a => a.Value)
-                             .ToListAsync();
+        store.OnChange += OnStoreChange;
+    }
+
+    private async Task OnStoreChange()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        store.OnChange -= OnStoreChange;
     }
 }

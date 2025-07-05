@@ -3,7 +3,6 @@ using OpenTelemetry.Trace;
 using OpenTelemetry.Metrics;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
-using Microsoft.EntityFrameworkCore;
 using Signals.UI;
 using Signals.Trace;
 using Signals;
@@ -24,6 +23,8 @@ builder.WebHost.ConfigureKestrel(options =>
     });
 });
 
+builder.Services.AddScoped<Store>();
+builder.Services.AddSingleton<Database>();
 builder.Services.AddGrpc();
 
 builder.Services.AddRazorComponents()
@@ -40,21 +41,19 @@ builder.Services.AddOpenTelemetry()
                     };
                 }
                 )
-                .AddEntityFrameworkCoreInstrumentation()
                 .AddOtlpExporter());
-
-builder.Services.AddDbContext<SignalsDbContext>(options =>
-    options.UseSqlite("Data Source=signals.db"));
 
 StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
 
 var app = builder.Build();
 
+
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<SignalsDbContext>();
-    db.Database.EnsureCreated();
+    var db = scope.ServiceProvider.GetRequiredService<Database>();
+    db.Create();
 }
+
 
 app.UseHsts();
 app.UseAntiforgery();

@@ -4,33 +4,27 @@
 
 It uses the official [**OpenTelemetry protobuf definitions**](https://github.com/open-telemetry/opentelemetry-proto) for decoding and processing telemetry data, with no need for an external collector.
 
-End-to-end observability in a single app:
+End-to-end observability in a single app. All in one process — no collector, no external storage, no dependencies:
 
 * 📥 **Receives telemetry** (traces, metrics, logs) over OTLP/gRPC
 * 🧠 **Parses OTLP messages** using the official **OpenTelemetry proto files**
-* 💾 **Persists data** with **SQLite** + **EF Core**
+* 💾 **Persists data** with **SQLite**
 * 🖥️ **Visualizes telemetry** via a modern Blazor UI
 * 🎨 Uses [**Pico.css**](https://picocss.com/) for modern, minimal styling without JavaScript
-
-All in one process — no collector, no external storage, no dependencies.
-
-* ✅ Built-in **OTLP/gRPC receiver**
-* 🧬 Uses **OpenTelemetry protobufs** directly (no intermediary SDKs)
-* 📦 Stores data via **Entity Framework Core + SQLite**
-* 🖼️ Blazor UI styled with **Pico.css** for exploring traces, logs, and metrics
 * 🧪 Supports any OTLP-compatible client (.NET, Python, Go, etc.)
-* 🛠️ Powered by **.NET 9**
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
 * [.NET 9 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0)
-* OTLP-compatible client (e.g., app with OpenTelemetry SDK)
+* Optional: OTLP-compatible client (e.g., app with OpenTelemetry SDK)
 
 ### Run the App
 
 ```bash
+git clone https://github.com/pvorselaars/signals
+cd signals
 dotnet run 
 ```
 
@@ -45,19 +39,10 @@ dotnet run
 
 Signals uses the **OpenTelemetry Protocol (OTLP) protobuf definitions** to:
 
-* Implement the `TraceService`, `MetricsService`*, and `LogsService` gRPC interfaces (see roadmap)
+* Implement the `TraceService`, `MetricsService`, and `LogsService` gRPC interfaces (see roadmap)
 * Deserialize incoming telemetry payloads directly from the wire
-* Convert raw proto messages into internal EF Core models
 
 The `.proto` files are compiled into C# classes during build using `Grpc.Tools`.
-
-## 💾 Data Storage
-
-* Database: **SQLite** (portable, file-based)
-* ORM: **Entity Framework Core (Code-First)**
-* Schema auto-created or updated via migrations
-
-Database path: `./signals.db` 
 
 ## 🔒 Security
 

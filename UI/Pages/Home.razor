@@ -1,41 +1,23 @@
 ﻿@page "/"
-@attribute [StreamRendering]
-@inject SignalsDbContext Db
-
+@inject Store store 
 <PageTitle>Signals</PageTitle>
 
-@if (services == null || resources == null || scopes == null)
-{
-    <progress />
-}
-else
-{
-    <div class="grid">
-        <div>Services: @services.Count</div>
-        <div>Resources: @resources.Count</div>
-        <div>Scopes: @scopes.Count</div>
-    </div>
-}
-
+<div class="grid">
+    <div>Resources: @store.Resources.Count</div>
+</div>
 @code {
-    private List<Common.Attribute>? services;
-    private List<Resource>? resources;
-    private List<InstrumentationScope>? scopes;
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        services = await Db.Attributes
-                           .Include(a => a.Key)
-                           .Include(a => a.Value)
-                           .Where(a => a.Key.Key == "service.name")
-                           .GroupBy(a => a.Value.Value)
-                           .Select(g => g.First())
-                           .ToListAsync();
+        store.OnChange += OnStoreChange;
+    }
 
-        resources = await Db.Resources
-                            .ToListAsync();
+    private async Task OnStoreChange()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
 
-        scopes = await Db.Scopes
-                         .ToListAsync();
+    public void Dispose()
+    {
+        store.OnChange -= OnStoreChange;
     }
 }
