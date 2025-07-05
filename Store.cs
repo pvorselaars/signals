@@ -13,14 +13,14 @@ public class Store : IAsyncDisposable
     {
         _db = database;
         _logger = logger;
-        _timer = new(Refresh, null, 0, 5000);
+        _timer = new(RefreshAsync, null, 0, 5000);
 
     }
     public Dictionary<long, Resource> Resources { get; set; } = [];
 
     public event Func<Task>? OnChange;
 
-    public async void Refresh(object? state)
+    public async void RefreshAsync(object? state)
     {
         if (_cts.Token.IsCancellationRequested) return;
 
