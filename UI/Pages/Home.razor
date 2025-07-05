@@ -2,9 +2,12 @@
 @inject Store store 
 <PageTitle>Signals</PageTitle>
 
-<div class="grid">
-    <div>Resources: @store.Resources.Count</div>
-</div>
+<article>
+    <body>
+        <span>Resources: @store.Resources.Count</span>
+    </body>
+</article>
+
 @code {
     protected override void OnInitialized()
     {

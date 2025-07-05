@@ -5,11 +5,14 @@
 
 @foreach (var resource in store.Resources)
 {
-    @foreach (var a in resource.Value.Attributes)
-    {
-        @a.Key  @a.Value<br>
-    }
-    <hr>
+    <article>
+        <body>
+        @foreach (var a in resource.Value.Attributes)
+        {
+            <span>@a.Key: @a.Value.StringValue<br></span>
+        }
+        </body>
+    </article>
 }
 
 @code {
