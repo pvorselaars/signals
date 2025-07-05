@@ -1,5 +1,4 @@
 using System.Data.SQLite;
-using Google.Protobuf.WellKnownTypes;
 using OpenTelemetry.Proto.Resource.V1;
 
 namespace Signals;

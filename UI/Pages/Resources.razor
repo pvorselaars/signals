@@ -5,9 +5,9 @@
 
 @foreach (var resource in store.Resources)
 {
-    @foreach (var a in resource.Value)
+    @foreach (var a in resource.Value.Attributes)
     {
-        @a<br>
+        @a.Key  @a.Value<br>
     }
     <hr>
 }
