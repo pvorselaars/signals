@@ -1,6 +1,7 @@
 using System.Data.SQLite;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Resource.V1;
+using OpenTelemetry.Proto.Trace.V1;
 
 namespace Signals;
 
@@ -24,6 +25,15 @@ public class Database
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
             version TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS spans (
+            id TEXT PRIMARY KEY,
+            parent TEXT,
+            name TEXT,
+            start INTEGER,
+            end INTEGER,
+            FOREIGN KEY(parent) REFERENCES spans(id)
         );
 
         CREATE TABLE IF NOT EXISTS keys (
@@ -58,11 +68,21 @@ public class Database
             FOREIGN KEY(attribute) REFERENCES attributes(id)
         );
 
+        CREATE TABLE IF NOT EXISTS span_attributes (
+            span TEXT,
+            attribute INTEGER,
+            FOREIGN KEY(span) REFERENCES spans(id),
+            FOREIGN KEY(attribute) REFERENCES attributes(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_resource_attributes_resource ON resource_attributes(resource);
         CREATE INDEX IF NOT EXISTS idx_resource_attributes_attribute ON resource_attributes(attribute);
 
         CREATE INDEX IF NOT EXISTS idx_scope_attributes_scope ON scope_attributes(scope);
         CREATE INDEX IF NOT EXISTS idx_scope_attributes_attribute ON scope_attributes(attribute);
+
+        CREATE INDEX IF NOT EXISTS idx_span_attributes_span ON span_attributes(span);
+        CREATE INDEX IF NOT EXISTS idx_span_attributes_attribute ON span_attributes(attribute);
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_keys_value ON keys(value);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_values_value ON ""values""(value);
@@ -73,6 +93,8 @@ public class Database
         cmd.ExecuteNonQuery();
         cmd.Dispose();
     }
+
+    // TOOD: Resource 1 -- * Scope 1 -- * Span
 
     public async Task AddAsync(IEnumerable<Resource> resources)
     {
@@ -96,6 +118,17 @@ public class Database
 
     }
 
+    public async Task AddAsync(IEnumerable<Span> spans)
+    {
+        var tasks = new List<Task>();
+
+        foreach (var span in spans)
+            tasks.Add(AddAsync(span));
+
+        await Task.WhenAll(tasks);
+
+    }
+
     private async Task ProcessAsync(Resource resource)
     {
         if (!await ExistsAsync(resource))
@@ -109,6 +142,40 @@ public class Database
             await AddAsync(scope);
 
     }
+
+    private async Task AddAsync(Span span)
+    {
+        using var transaction = connection.BeginTransaction();
+
+        using SQLiteCommand insertResource = new("INSERT OR IGNORE INTO spans (id, parent, name) VALUES ($id, $parent, $name)", connection);
+        insertResource.Parameters.AddWithValue("$id", span.SpanId.ToBase64());
+        insertResource.Parameters.AddWithValue("$parent", span.ParentSpanId.ToBase64());
+        insertResource.Parameters.AddWithValue("$name", span.Name);
+        await insertResource.ExecuteNonQueryAsync();
+
+        foreach (var a in span.Attributes)
+        {
+            var keyId = GetOrInsertIdAsync(transaction, "keys", a.Key);
+            var valueId = GetOrInsertIdAsync(transaction, "\"values\"", a.Value.StringValue);
+
+            await Task.WhenAll(keyId, valueId);
+
+            var attributeId = await GetOrInsertAttributeIdAsync(transaction, keyId.Result, valueId.Result);
+
+            using var link = connection.CreateCommand();
+            link.Transaction = transaction;
+            link.CommandText = @"
+            INSERT INTO span_attributes (span, attribute)
+            VALUES ($span, $attribute);";
+            link.Parameters.AddWithValue("$span", span.SpanId.ToBase64());
+            link.Parameters.AddWithValue("$attribute", attributeId);
+            await link.ExecuteNonQueryAsync();
+
+        }
+
+        await transaction.CommitAsync();
+    }
+
 
     private async Task<bool> ExistsAsync(InstrumentationScope scope)
     {
@@ -228,6 +295,8 @@ public class Database
         await transaction.CommitAsync();
     }
 
+    // TOOD: store AnyValue
+
     private async Task<long> GetOrInsertAttributeIdAsync(SQLiteTransaction transaction, long key, long value)
     {
         using var insert = connection.CreateCommand();
@@ -345,6 +414,63 @@ public class Database
             };
 
             result[scopeId].Attributes.Add(new KeyValue { Key = key, Value = val });
+
+        }
+
+        return result.Values;
+
+    }
+
+    public async Task<IEnumerable<Span>> GetSpansAsync()
+    {
+
+        using var select = connection.CreateCommand();
+        select.CommandText = @"SELECT
+                                    s.id,
+                                    s.parent,
+                                    s.name,
+                                    k.value AS Key,
+                                    v.value AS Value
+                                FROM spans s
+                                LEFT JOIN span_attributes sa ON s.id = sa.span
+                                LEFT JOIN attributes a ON a.id = sa.attribute
+                                LEFT JOIN keys k ON k.id = a.key
+                                LEFT JOIN 'values' v ON v.id = a.value
+                                ORDER BY s.parent;";
+
+        using var reader = await select.ExecuteReaderAsync();
+
+        Dictionary<string, Span> result = [];
+
+        while (await reader.ReadAsync())
+        {
+
+            string spanId = reader.GetString(0);
+            string name = reader.GetString(2);
+
+            if (!result.TryGetValue(spanId, out var r))
+            {
+                result[spanId] = new Span
+                {
+                    Name = name
+                };
+            }
+
+            if (!reader.IsDBNull(2))
+            {
+
+                string key = reader.GetString(3);
+                string value = reader.GetString(4);
+
+                var val = new AnyValue
+                {
+                    StringValue = value
+                };
+
+                result[spanId].Attributes.Add(new KeyValue { Key = key, Value = val });
+
+            }
+
 
         }
 
