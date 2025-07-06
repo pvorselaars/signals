@@ -7,7 +7,7 @@
 {
     <article>
         <body>
-        @foreach (var a in resource.Value.Attributes)
+        @foreach (var a in resource.Attributes)
         {
             <span>@a.Key: @a.Value.StringValue<br></span>
         }

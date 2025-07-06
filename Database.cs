@@ -1,11 +1,12 @@
 using System.Data.SQLite;
+using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Resource.V1;
 
 namespace Signals;
 
 public class Database
 {
-    const string connectionString = "Data Source=signals2.db;Version=3";
+    const string connectionString = "Data Source=signals.db;Version=3";
 
     private readonly SQLiteConnection connection = new(connectionString);
 
@@ -17,6 +18,12 @@ public class Database
 
         CREATE TABLE IF NOT EXISTS resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT
+        );
+
+        CREATE TABLE IF NOT EXISTS scopes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            version TEXT
         );
 
         CREATE TABLE IF NOT EXISTS keys (
@@ -44,8 +51,18 @@ public class Database
             FOREIGN KEY(attribute) REFERENCES attributes(id)
         );
 
+        CREATE TABLE IF NOT EXISTS scope_attributes (
+            scope INTEGER,
+            attribute INTEGER,
+            FOREIGN KEY(scope) REFERENCES scopes(id),
+            FOREIGN KEY(attribute) REFERENCES attributes(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_resource_attributes_resource ON resource_attributes(resource);
         CREATE INDEX IF NOT EXISTS idx_resource_attributes_attribute ON resource_attributes(attribute);
+
+        CREATE INDEX IF NOT EXISTS idx_scope_attributes_scope ON scope_attributes(scope);
+        CREATE INDEX IF NOT EXISTS idx_scope_attributes_attribute ON scope_attributes(attribute);
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_keys_value ON keys(value);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_values_value ON ""values""(value);
@@ -57,29 +74,130 @@ public class Database
         cmd.Dispose();
     }
 
-    public async Task AddResourcesAsync(IEnumerable<Resource> resources)
+    public async Task AddAsync(IEnumerable<Resource> resources)
     {
         var tasks = new List<Task>();
 
         foreach (var resource in resources)
-        {
-
-            tasks.Add(ProcessResourceAsync(resource));
-
-        }
+            tasks.Add(ProcessAsync(resource));
 
         await Task.WhenAll(tasks);
 
     }
 
-    private async Task ProcessResourceAsync(Resource resource)
+    public async Task AddAsync(IEnumerable<InstrumentationScope> scopes)
     {
-        if (!await ResourceExistsAsync(resource))
-            await AddResourceAsync(resource);
+        var tasks = new List<Task>();
+
+        foreach (var scope in scopes)
+            tasks.Add(ProcessAsync(scope));
+
+        await Task.WhenAll(tasks);
 
     }
 
-    private async Task AddResourceAsync(Resource resource)
+    private async Task ProcessAsync(Resource resource)
+    {
+        if (!await ExistsAsync(resource))
+            await AddAsync(resource);
+
+    }
+
+    private async Task ProcessAsync(InstrumentationScope scope)
+    {
+        if (!await ExistsAsync(scope))
+            await AddAsync(scope);
+
+    }
+
+    private async Task<bool> ExistsAsync(InstrumentationScope scope)
+    {
+
+        string query = $@"
+        SELECT id
+        FROM scopes
+        WHERE name = $name AND version = $version
+        LIMIT 1;";
+
+        using SQLiteCommand cmd = new(query, connection);
+
+        cmd.Parameters.AddWithValue("$name", scope.Name);
+        cmd.Parameters.AddWithValue("$version", scope.Version);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync();
+    }
+
+    private async Task AddAsync(InstrumentationScope scope)
+    {
+        using var transaction = connection.BeginTransaction();
+
+        using SQLiteCommand insertResource = new("INSERT INTO scopes (name, version) VALUES ($name, $version)", connection);
+        insertResource.Parameters.AddWithValue("$name", scope.Name);
+        insertResource.Parameters.AddWithValue("$version", scope.Version);
+        await insertResource.ExecuteNonQueryAsync();
+        long scopeId = connection.LastInsertRowId;
+
+        foreach (var a in scope.Attributes)
+        {
+            var keyId = GetOrInsertIdAsync(transaction, "keys", a.Key);
+            var valueId = GetOrInsertIdAsync(transaction, "\"values\"", a.Value.StringValue);
+
+            await Task.WhenAll(keyId, valueId);
+
+            var attributeId = await GetOrInsertAttributeIdAsync(transaction, keyId.Result, valueId.Result);
+
+            using var link = connection.CreateCommand();
+            link.Transaction = transaction;
+            link.CommandText = @"
+            INSERT INTO scope_attributes (scope, attribute)
+            VALUES ($scope, $attribute);";
+            link.Parameters.AddWithValue("$scope", scopeId);
+            link.Parameters.AddWithValue("$attribute", attributeId);
+            await link.ExecuteNonQueryAsync();
+
+        }
+
+        await transaction.CommitAsync();
+    }
+
+    private async Task<bool> ExistsAsync(Resource resource)
+    {
+        var attributes = resource.Attributes.Where(a => a.Key.StartsWith("service"));
+        var conditions = attributes.Select((a, i) => $"(k.value = @key{i} AND v.value = @value{i})");
+        var where = string.Join(" OR ", conditions);
+
+        string query = $@"
+        SELECT r.id
+        FROM resources r
+        JOIN (
+            SELECT ra.resource
+            FROM resource_attributes ra
+            WHERE ra.attribute IN (
+                SELECT a.id
+                FROM attributes a
+                JOIN keys k ON a.key = k.id
+                JOIN ""values"" v ON a.value = v.id
+                WHERE {where}
+            )
+        )
+        LIMIT 1;";
+
+        using SQLiteCommand cmd = new(query, connection);
+
+        int i = 0;
+        foreach (var a in attributes)
+        {
+            cmd.Parameters.AddWithValue($"@key{i}", a.Key);
+            cmd.Parameters.AddWithValue($"@value{i}", a.Value.StringValue);
+            i++;
+        }
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync();
+    }
+
+    private async Task AddAsync(Resource resource)
     {
         using var transaction = connection.BeginTransaction();
 
@@ -144,43 +262,7 @@ public class Database
         return Convert.ToInt64(result);
     }
 
-    private async Task<bool> ResourceExistsAsync(Resource resource)
-    {
-        var attributes = resource.Attributes.Where(a => a.Key.StartsWith("service"));
-        var conditions = attributes.Select((a, i) => $"(k.value = @key{i} AND v.value = @value{i})");
-        var where = string.Join(" OR ", conditions);
-
-        string query = $@"
-        SELECT r.id
-        FROM resources r
-        JOIN (
-            SELECT ra.resource
-            FROM resource_attributes ra
-            WHERE ra.attribute IN (
-                SELECT a.id
-                FROM attributes a
-                JOIN keys k ON a.key = k.id
-                JOIN ""values"" v ON a.value = v.id
-                WHERE {where}
-            )
-        )
-        LIMIT 1;";
-
-        using SQLiteCommand cmd = new(query, connection);
-
-        int i = 0;
-        foreach (var a in attributes)
-        {
-            cmd.Parameters.AddWithValue($"@key{i}", a.Key);
-            cmd.Parameters.AddWithValue($"@value{i}", a.Value.StringValue);
-            i++;
-        }
-
-        using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync();
-    }
-
-    public async Task<Dictionary<long, Resource>> GetResourcesAsync()
+    public async Task<IEnumerable<Resource>> GetResourcesAsync()
     {
 
         using var select = connection.CreateCommand();
@@ -211,16 +293,62 @@ public class Database
                 result[resourceId] = new();
             }
 
-            var val = new OpenTelemetry.Proto.Common.V1.AnyValue
+            var val = new AnyValue
             {
                 StringValue = value
             };
 
-            result[resourceId].Attributes.Add(new OpenTelemetry.Proto.Common.V1.KeyValue { Key = key, Value = val });
+            result[resourceId].Attributes.Add(new KeyValue { Key = key, Value = val });
 
         }
 
-        return result;
+        return result.Values;
+
+    }
+
+    public async Task<IEnumerable<InstrumentationScope>> GetScopesAsync()
+    {
+
+        using var select = connection.CreateCommand();
+        select.CommandText = @"SELECT
+                                    s.id,
+                                    s.name,
+                                    s.version,
+                                    k.value AS Key,
+                                    v.value AS Value
+                                FROM scopes s
+                                LEFT JOIN scope_attributes sa ON s.id = sa.scope
+                                LEFT JOIN attributes a ON a.id = sa.attribute
+                                LEFT JOIN keys k ON k.id = a.key
+                                LEFT JOIN 'values' v ON v.id = a.value
+                                ORDER BY s.id;";
+
+        using var reader = await select.ExecuteReaderAsync();
+
+        Dictionary<long, InstrumentationScope> result = [];
+
+        while (await reader.ReadAsync())
+        {
+
+            long scopeId = reader.GetInt64(0);
+            string key = reader.GetString(1);
+            string value = reader.GetString(2);
+
+            if (!result.TryGetValue(scopeId, out var r))
+            {
+                result[scopeId] = new();
+            }
+
+            var val = new AnyValue
+            {
+                StringValue = value
+            };
+
+            result[scopeId].Attributes.Add(new KeyValue { Key = key, Value = val });
+
+        }
+
+        return result.Values;
 
     }
 

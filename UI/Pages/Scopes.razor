@@ -1,19 +1,21 @@
-﻿@page "/"
-@inject Store store 
-<PageTitle>Signals</PageTitle>
+﻿@page "/scopes"
+@inject Store store
 
-<div class="grid">
+<PageTitle>Scopes</PageTitle>
+
+@foreach (var scope in store.Scopes)
+{
     <article>
+        <header>@scope.Name</header>
         <body>
-            <span>Resources: @store.Resources.Count()</span>
+        @foreach (var a in scope.Attributes)
+        {
+            <span>@a.Key: @a.Value.StringValue<br></span>
+        }
         </body>
+        <footer>@scope.Version</footer>
     </article>
-    <article>
-        <body>
-            <span>Scopes: @store.Scopes.Count()</span>
-        </body>
-    </article>
-</div>
+}
 
 @code {
     protected override void OnInitialized()

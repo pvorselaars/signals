@@ -1,3 +1,4 @@
+using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Resource.V1;
 
 namespace Signals;
@@ -16,7 +17,8 @@ public class Store : IAsyncDisposable
         _timer = new(RefreshAsync, null, 0, 5000);
 
     }
-    public Dictionary<long, Resource> Resources { get; set; } = [];
+    public IEnumerable<Resource> Resources { get; set; } = [];
+    public IEnumerable<InstrumentationScope> Scopes { get; set; } = [];
 
     public event Func<Task>? OnChange;
 
@@ -27,6 +29,7 @@ public class Store : IAsyncDisposable
         try
         {
             Resources = await _db.GetResourcesAsync();
+            Scopes = await _db.GetScopesAsync();
 
             if (OnChange != null)
                 await OnChange.Invoke();

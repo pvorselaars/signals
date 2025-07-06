@@ -10,7 +10,8 @@ public class TracesReceiver(Database data) : TraceService.TraceServiceBase
         ExportTraceServiceRequest request,
         ServerCallContext context)
     {
-        await data.AddResourcesAsync(request.ResourceSpans.Select(s => s.Resource));
+        await data.AddAsync(request.ResourceSpans.Select(s => s.Resource));
+        await data.AddAsync(request.ResourceSpans.SelectMany(s => s.ScopeSpans).Select(s => s.Scope));
 
         return new ExportTraceServiceResponse();
     }
