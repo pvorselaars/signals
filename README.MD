@@ -25,6 +25,9 @@ End-to-end observability in a single app. All in one process — no collector, n
 ```bash
 git clone https://github.com/pvorselaars/signals
 cd signals
+
+git submodule update --init
+
 dotnet run 
 ```
 
