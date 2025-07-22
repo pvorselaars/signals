@@ -18,9 +18,9 @@ public class Store : IAsyncDisposable
         _timer = new(RefreshAsync, null, 0, 5000);
 
     }
-    public IEnumerable<Resource> Resources { get; set; } = [];
-    public IEnumerable<InstrumentationScope> Scopes { get; set; } = [];
-    public IEnumerable<Span> Spans { get; set; } = [];
+    public IEnumerable<Resource> Resources { get; private set; } = [];
+    public IEnumerable<InstrumentationScope> Scopes { get; private set; } = [];
+    public IEnumerable<Span> Spans { get; private set; } = [];
 
     public event Func<Task>? OnChange;
 
