@@ -355,7 +355,7 @@ public class Database
             string key = reader.GetString(1);
             string value = reader.GetString(2);
 
-            if (!result.TryGetValue(resourceId, out var r))
+            if (!result.ContainsKey(resourceId))
             {
                 result[resourceId] = new();
             }
@@ -400,7 +400,7 @@ public class Database
             string key = reader.GetString(1);
             string value = reader.GetString(2);
 
-            if (!result.TryGetValue(scopeId, out var r))
+            if (!result.ContainsKey(scopeId))
             {
                 result[scopeId] = new();
             }
@@ -444,7 +444,7 @@ public class Database
             string spanId = reader.GetString(0);
             string name = reader.GetString(2);
 
-            if (!result.TryGetValue(spanId, out var r))
+            if (!result.ContainsKey(spanId))
             {
                 result[spanId] = new Span
                 {
