@@ -7,9 +7,9 @@ public class Store : IAsyncDisposable
 {
     private readonly ILogger<Store> _logger;
     private readonly Database _db;
-    private Timer? _timer;
+    private readonly Timer? _timer;
 
-    private CancellationTokenSource _cts = new();
+    private readonly CancellationTokenSource _cts = new();
 
     public Store(Database database, ILogger<Store> logger)
     {
