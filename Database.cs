@@ -144,9 +144,9 @@ public class Database
 
     private async Task AddAsync(Span span)
     {
-        using var transaction = connection.BeginTransaction();
+        await using var transaction = connection.BeginTransaction();
 
-        using SQLiteCommand insertResource = new("INSERT OR IGNORE INTO spans (id, parent, name) VALUES ($id, $parent, $name)", connection);
+        await using SQLiteCommand insertResource = new("INSERT OR IGNORE INTO spans (id, parent, name) VALUES ($id, $parent, $name)", connection);
         insertResource.Parameters.AddWithValue("$id", span.SpanId.ToBase64());
         insertResource.Parameters.AddWithValue("$parent", span.ParentSpanId.ToBase64());
         insertResource.Parameters.AddWithValue("$name", span.Name);
@@ -161,7 +161,7 @@ public class Database
 
             var attributeId = await GetOrInsertAttributeIdAsync(transaction, keyId.Result, valueId.Result);
 
-            using var link = connection.CreateCommand();
+            await using var link = connection.CreateCommand();
             link.Transaction = transaction;
             link.CommandText = @"
             INSERT INTO span_attributes (span, attribute)
@@ -185,20 +185,20 @@ public class Database
         WHERE name = $name AND version = $version
         LIMIT 1;";
 
-        using SQLiteCommand cmd = new(query, connection);
+        await using SQLiteCommand cmd = new(query, connection);
 
         cmd.Parameters.AddWithValue("$name", scope.Name);
         cmd.Parameters.AddWithValue("$version", scope.Version);
 
-        using var reader = await cmd.ExecuteReaderAsync();
+        await using var reader = await cmd.ExecuteReaderAsync();
         return await reader.ReadAsync();
     }
 
     private async Task AddAsync(InstrumentationScope scope)
     {
-        using var transaction = connection.BeginTransaction();
+        await using var transaction = connection.BeginTransaction();
 
-        using SQLiteCommand insertResource = new("INSERT INTO scopes (name, version) VALUES ($name, $version)", connection);
+        await using SQLiteCommand insertResource = new("INSERT INTO scopes (name, version) VALUES ($name, $version)", connection);
         insertResource.Parameters.AddWithValue("$name", scope.Name);
         insertResource.Parameters.AddWithValue("$version", scope.Version);
         await insertResource.ExecuteNonQueryAsync();
@@ -213,7 +213,7 @@ public class Database
 
             var attributeId = await GetOrInsertAttributeIdAsync(transaction, keyId.Result, valueId.Result);
 
-            using var link = connection.CreateCommand();
+            await using var link = connection.CreateCommand();
             link.Transaction = transaction;
             link.CommandText = @"
             INSERT INTO scope_attributes (scope, attribute)
@@ -249,7 +249,7 @@ public class Database
         )
         LIMIT 1;";
 
-        using SQLiteCommand cmd = new(query, connection);
+        await using SQLiteCommand cmd = new(query, connection);
 
         int i = 0;
         foreach (var a in attributes)
@@ -259,15 +259,15 @@ public class Database
             i++;
         }
 
-        using var reader = await cmd.ExecuteReaderAsync();
+        await using var reader = await cmd.ExecuteReaderAsync();
         return await reader.ReadAsync();
     }
 
     private async Task AddAsync(Resource resource)
     {
-        using var transaction = connection.BeginTransaction();
+        await using var transaction = connection.BeginTransaction();
 
-        using SQLiteCommand insertResource = new("INSERT INTO resources DEFAULT VALUES", connection);
+        await using SQLiteCommand insertResource = new("INSERT INTO resources DEFAULT VALUES", connection);
         await insertResource.ExecuteNonQueryAsync();
         long resourceId = connection.LastInsertRowId;
 
@@ -280,7 +280,7 @@ public class Database
 
             var attributeId = await GetOrInsertAttributeIdAsync(transaction, keyId.Result, valueId.Result);
 
-            using var link = connection.CreateCommand();
+            await using var link = connection.CreateCommand();
             link.Transaction = transaction;
             link.CommandText = @"
             INSERT INTO resource_attributes (resource, attribute)
@@ -298,14 +298,14 @@ public class Database
 
     private async Task<long> GetOrInsertAttributeIdAsync(SQLiteTransaction transaction, long key, long value)
     {
-        using var insert = connection.CreateCommand();
+        await using var insert = connection.CreateCommand();
         insert.Transaction = transaction;
         insert.CommandText = $"INSERT OR IGNORE INTO attributes (key, value) VALUES ($key, $value)";
         insert.Parameters.AddWithValue("$key", key);
         insert.Parameters.AddWithValue("$value", value);
         await insert.ExecuteNonQueryAsync();
 
-        using var select = connection.CreateCommand();
+        await using var select = connection.CreateCommand();
         select.Transaction = transaction;
         select.CommandText = $"SELECT id FROM attributes WHERE key = $key AND value = $value";
         select.Parameters.AddWithValue("$key", key);
@@ -316,13 +316,13 @@ public class Database
 
     private async Task<long> GetOrInsertIdAsync(SQLiteTransaction transaction, string table, string value)
     {
-        using var insert = connection.CreateCommand();
+        await using var insert = connection.CreateCommand();
         insert.Transaction = transaction;
         insert.CommandText = $"INSERT OR IGNORE INTO {table} (value) VALUES ($value)";
         insert.Parameters.AddWithValue("$value", value);
         await insert.ExecuteNonQueryAsync();
 
-        using var select = connection.CreateCommand();
+        await using var select = connection.CreateCommand();
         select.Transaction = transaction;
         select.CommandText = $"SELECT id FROM {table} WHERE value = $value";
         select.Parameters.AddWithValue("$value", value);
@@ -332,8 +332,7 @@ public class Database
 
     public async Task<IEnumerable<Resource>> GetResourcesAsync()
     {
-
-        using var select = connection.CreateCommand();
+        await using var select = connection.CreateCommand();
         select.CommandText = @"SELECT
                                 r.id AS ResourceId,
                                 k.value AS Key,
@@ -345,7 +344,7 @@ public class Database
                             JOIN ""values"" v ON v.id = a.value
                             ORDER BY r.id;";
 
-        using var reader = await select.ExecuteReaderAsync();
+        await using var reader = await select.ExecuteReaderAsync();
 
         Dictionary<long, Resource> result = [];
 
@@ -376,8 +375,7 @@ public class Database
 
     public async Task<IEnumerable<InstrumentationScope>> GetScopesAsync()
     {
-
-        using var select = connection.CreateCommand();
+        await using var select = connection.CreateCommand();
         select.CommandText = @"SELECT
                                     s.id,
                                     s.name,
@@ -391,7 +389,7 @@ public class Database
                                 LEFT JOIN 'values' v ON v.id = a.value
                                 ORDER BY s.id;";
 
-        using var reader = await select.ExecuteReaderAsync();
+        await using var reader = await select.ExecuteReaderAsync();
 
         Dictionary<long, InstrumentationScope> result = [];
 
@@ -422,8 +420,7 @@ public class Database
 
     public async Task<IEnumerable<Span>> GetSpansAsync()
     {
-
-        using var select = connection.CreateCommand();
+        await using var select = connection.CreateCommand();
         select.CommandText = @"SELECT
                                     s.id,
                                     s.parent,
@@ -437,7 +434,7 @@ public class Database
                                 LEFT JOIN 'values' v ON v.id = a.value
                                 ORDER BY s.parent;";
 
-        using var reader = await select.ExecuteReaderAsync();
+        await using var reader = await select.ExecuteReaderAsync();
 
         Dictionary<string, Span> result = [];
 
