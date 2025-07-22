@@ -7,7 +7,7 @@ namespace Signals;
 
 public class Database
 {
-    const string connectionString = "Data Source=signals.db;Version=3";
+    private const string connectionString = "Data Source=signals.db;Version=3";
 
     private readonly SQLiteConnection connection = new(connectionString);
 
