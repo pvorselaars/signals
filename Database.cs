@@ -89,9 +89,8 @@ public class Database
         CREATE UNIQUE INDEX IF NOT EXISTS idx_attributes_key_value ON attributes(key, value);
 
         ";
-        SQLiteCommand cmd = new(sql, connection);
+        using SQLiteCommand cmd = new(sql, connection);
         cmd.ExecuteNonQuery();
-        cmd.Dispose();
     }
 
     // TOOD: Resource 1 -- * Scope 1 -- * Span
