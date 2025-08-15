@@ -7,9 +7,9 @@ namespace Signals;
 
 public class Database
 {
-    private const string connectionString = "Data Source=signals.db;Version=3";
+    private const string file = "signals.db";
 
-    private readonly SQLiteConnection connection = new(connectionString);
+    private readonly SQLiteConnection connection = new($"Data Source={file};Version=3;");
 
     public void Create()
     {
@@ -75,6 +75,20 @@ public class Database
             FOREIGN KEY(attribute) REFERENCES attributes(id)
         );
 
+        CREATE TABLE IF NOT EXISTS resource_scopes (
+            resource INTEGER,
+            scope INTEGER,
+            FOREIGN KEY(resource) REFERENCES resources(id),
+            FOREIGN KEY(scope) REFERENCES scopes(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS scope_spans (
+            scope INTEGER,
+            span TEXT,
+            FOREIGN KEY(scope) REFERENCES scopes(id),
+            FOREIGN KEY(span) REFERENCES spans(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_resource_attributes_resource ON resource_attributes(resource);
         CREATE INDEX IF NOT EXISTS idx_resource_attributes_attribute ON resource_attributes(attribute);
 
@@ -88,61 +102,70 @@ public class Database
         CREATE UNIQUE INDEX IF NOT EXISTS idx_values_value ON ""values""(value);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_attributes_key_value ON attributes(key, value);
 
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_scopes ON resource_scopes(resource, scope);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_scope_spans ON scope_spans(scope, span);
+
         ";
         using SQLiteCommand cmd = new(sql, connection);
         cmd.ExecuteNonQuery();
     }
 
-    // TOOD: Resource 1 -- * Scope 1 -- * Span
-
-    public async Task AddAsync(IEnumerable<Resource> resources)
+    public async Task AddAsync(IEnumerable<ResourceSpans> resourceSpans)
     {
-        var tasks = new List<Task>();
 
-        foreach (var resource in resources)
-            tasks.Add(ProcessAsync(resource));
+        foreach (var resourceSpan in resourceSpans)
+        {
 
-        await Task.WhenAll(tasks);
+            var resourceId = await AddIfNotExistsAsync(resourceSpan.Resource);
+
+            foreach (var scopeSpan in resourceSpan.ScopeSpans)
+            {
+                var scopeId = await AddIfNotExistsAsync(scopeSpan.Scope, resourceId);
+                await AddAsync(scopeSpan.Spans, scopeId);
+            }
+        }
 
     }
 
-    public async Task AddAsync(IEnumerable<InstrumentationScope> scopes)
-    {
-        var tasks = new List<Task>();
-
-        foreach (var scope in scopes)
-            tasks.Add(ProcessAsync(scope));
-
-        await Task.WhenAll(tasks);
-
-    }
-
-    public async Task AddAsync(IEnumerable<Span> spans)
+    private async Task AddAsync(IEnumerable<Span> spans, long scopeId)
     {
         var tasks = new List<Task>();
 
         foreach (var span in spans)
-            tasks.Add(AddAsync(span));
+            tasks.Add(AddAsync(span, scopeId));
 
         await Task.WhenAll(tasks);
 
     }
 
-    private async Task ProcessAsync(Resource resource)
+    private async Task<long> AddIfNotExistsAsync(InstrumentationScope scope, long resourceId)
     {
-        if (!await ExistsAsync(resource))
-            await AddAsync(resource);
+        long scopeId = await GetIdAsync(scope);
+        if (scopeId == -1)
+            scopeId = await AddAsync(scope);
 
+        await using var transaction = connection.BeginTransaction();
+
+        await using SQLiteCommand insertLink = new("INSERT OR IGNORE INTO resource_scopes (resource, scope) VALUES ($resource, $scope)", connection);
+        insertLink.Parameters.AddWithValue("$resource", resourceId);
+        insertLink.Parameters.AddWithValue("$scope", scopeId);
+        await insertLink.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+
+        return scopeId;
     }
 
-    private async Task ProcessAsync(InstrumentationScope scope)
+    private async Task<long> AddIfNotExistsAsync(Resource resource)
     {
-        if (!await ExistsAsync(scope))
-            await AddAsync(scope);
+        long resourceId = await GetIdAsync(resource);
 
+        if (resourceId == -1)
+            resourceId = await AddAsync(resource);
+
+        return resourceId;
     }
 
-    private async Task AddAsync(Span span)
+    private async Task AddAsync(Span span, long scopeId)
     {
         await using var transaction = connection.BeginTransaction();
 
@@ -150,7 +173,15 @@ public class Database
         insertResource.Parameters.AddWithValue("$id", span.SpanId.ToBase64());
         insertResource.Parameters.AddWithValue("$parent", span.ParentSpanId.ToBase64());
         insertResource.Parameters.AddWithValue("$name", span.Name);
+        insertResource.Transaction = transaction;
         await insertResource.ExecuteNonQueryAsync();
+        long spanId = connection.LastInsertRowId;
+
+        await using SQLiteCommand insertLink = new("INSERT OR IGNORE INTO scope_spans (scope, span) VALUES ($scope, $span)", connection);
+        insertLink.Parameters.AddWithValue("$scope", scopeId);
+        insertLink.Parameters.AddWithValue("$span", span.SpanId.ToBase64());
+        insertLink.Transaction = transaction;
+        await insertLink.ExecuteNonQueryAsync();
 
         foreach (var a in span.Attributes)
         {
@@ -176,7 +207,7 @@ public class Database
     }
 
 
-    private async Task<bool> ExistsAsync(InstrumentationScope scope)
+    private async Task<long> GetIdAsync(InstrumentationScope scope)
     {
 
         string query = $@"
@@ -190,11 +221,15 @@ public class Database
         cmd.Parameters.AddWithValue("$name", scope.Name);
         cmd.Parameters.AddWithValue("$version", scope.Version);
 
+        long scopeId = -1;
         await using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync();
+        if (await reader.ReadAsync())
+            scopeId = reader.GetInt64(0);
+
+        return scopeId;
     }
 
-    private async Task AddAsync(InstrumentationScope scope)
+    private async Task<long> AddAsync(InstrumentationScope scope)
     {
         await using var transaction = connection.BeginTransaction();
 
@@ -225,9 +260,11 @@ public class Database
         }
 
         await transaction.CommitAsync();
+
+        return scopeId;
     }
 
-    private async Task<bool> ExistsAsync(Resource resource)
+    private async Task<long> GetIdAsync(Resource resource)
     {
         var attributes = resource.Attributes.Where(a => a.Key.StartsWith("service"));
         var conditions = attributes.Select((a, i) => $"(k.value = @key{i} AND v.value = @value{i})");
@@ -259,11 +296,15 @@ public class Database
             i++;
         }
 
+        long resourceId = -1;
         await using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync();
+        if (await reader.ReadAsync())
+            resourceId = reader.GetInt64(0);
+
+        return resourceId;
     }
 
-    private async Task AddAsync(Resource resource)
+    private async Task<long> AddAsync(Resource resource)
     {
         await using var transaction = connection.BeginTransaction();
 
@@ -292,10 +333,11 @@ public class Database
         }
 
         await transaction.CommitAsync();
+
+        return resourceId;
     }
 
     // TOOD: store AnyValue
-
     private async Task<long> GetOrInsertAttributeIdAsync(SQLiteTransaction transaction, long key, long value)
     {
         await using var insert = connection.CreateCommand();
@@ -330,7 +372,7 @@ public class Database
         return Convert.ToInt64(result);
     }
 
-    public async Task<IEnumerable<Resource>> GetResourcesAsync()
+    public async Task<Dictionary<long, Resource>> GetResourcesAsync()
     {
         await using var select = connection.CreateCommand();
         select.CommandText = @"SELECT
@@ -369,11 +411,58 @@ public class Database
 
         }
 
-        return result.Values;
+        return result;
 
     }
 
-    public async Task<IEnumerable<InstrumentationScope>> GetScopesAsync()
+    public async Task<Dictionary<long, InstrumentationScope>> GetScopesAsync(IEnumerable<long> resourceIds)
+    {
+        await using var select = connection.CreateCommand();
+        select.CommandText = @"SELECT
+                                    s.id,
+                                    s.name,
+                                    s.version,
+                                    k.value AS Key,
+                                    v.value AS Value
+                                FROM scopes s
+                                JOIN resource_scopes rs ON rs.scope = s.id
+                                LEFT JOIN scope_attributes sa ON s.id = sa.scope
+                                LEFT JOIN attributes a ON a.id = sa.attribute
+                                LEFT JOIN keys k ON k.id = a.key
+                                LEFT JOIN 'values' v ON v.id = a.value
+                                WHERE rs.resource IN (" + string.Join(",", resourceIds) + @")
+                                ORDER BY s.id;";
+
+        await using var reader = await select.ExecuteReaderAsync();
+
+        Dictionary<long, InstrumentationScope> result = [];
+
+        while (await reader.ReadAsync())
+        {
+
+            long scopeId = reader.GetInt64(0);
+            string key = reader.GetString(1);
+            string value = reader.GetString(2);
+
+            if (!result.ContainsKey(scopeId))
+            {
+                result[scopeId] = new();
+            }
+
+            var val = new AnyValue
+            {
+                StringValue = value
+            };
+
+            result[scopeId].Attributes.Add(new KeyValue { Key = key, Value = val });
+
+        }
+
+        return result;
+
+    }
+
+    public async Task<Dictionary<long, InstrumentationScope>> GetScopesAsync()
     {
         await using var select = connection.CreateCommand();
         select.CommandText = @"SELECT
@@ -414,7 +503,7 @@ public class Database
 
         }
 
-        return result.Values;
+        return result;
 
     }
 
@@ -452,7 +541,65 @@ public class Database
                 };
             }
 
-            if (!reader.IsDBNull(2))
+            if (!reader.IsDBNull(3))
+            {
+
+                string key = reader.GetString(3);
+                string value = reader.GetString(4);
+
+                var val = new AnyValue
+                {
+                    StringValue = value
+                };
+
+                result[spanId].Attributes.Add(new KeyValue { Key = key, Value = val });
+
+            }
+
+
+        }
+
+        return result.Values;
+
+    }
+
+    public async Task<IEnumerable<Span>> GetSpansAsync(IEnumerable<long> scopeIds)
+    {
+        await using var select = connection.CreateCommand();
+        select.CommandText = @"SELECT
+                                    s.id,
+                                    s.parent,
+                                    s.name,
+                                    k.value AS Key,
+                                    v.value AS Value
+                                FROM spans s
+                                JOIN scope_spans ss ON ss.span = s.id
+                                LEFT JOIN span_attributes sa ON s.id = sa.span
+                                LEFT JOIN attributes a ON a.id = sa.attribute
+                                LEFT JOIN keys k ON k.id = a.key
+                                LEFT JOIN 'values' v ON v.id = a.value
+                                WHERE ss.scope IN (" + string.Join(",", scopeIds) + @")
+                                ORDER BY s.parent;";
+
+        await using var reader = await select.ExecuteReaderAsync();
+
+        Dictionary<string, Span> result = [];
+
+        while (await reader.ReadAsync())
+        {
+
+            string spanId = reader.GetString(0);
+            string name = reader.GetString(2);
+
+            if (!result.ContainsKey(spanId))
+            {
+                result[spanId] = new Span
+                {
+                    Name = name
+                };
+            }
+
+            if (!reader.IsDBNull(3))
             {
 
                 string key = reader.GetString(3);

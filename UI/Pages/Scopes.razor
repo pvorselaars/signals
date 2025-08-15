@@ -5,15 +5,23 @@
 
 @foreach (var scope in store.Scopes)
 {
-    <article>
-        <header>@scope.Name</header>
+    bool isSelected = store.SelectedScopes.Contains(scope.Key);
+    string cssClass = isSelected ? "selected" : "";
+    Action clickHandler = isSelected
+    ? async () => await store.DeselectScope(scope.Key)
+    : async () => await store.SelectScope(scope.Key);
+
+    <article class="@cssClass" @onclick="clickHandler" style="cursor: pointer;">
+
+        <header>@scope.Value.Name</header>
+
         <body>
-        @foreach (var a in scope.Attributes)
-        {
-            <span>@a.Key: @a.Value.StringValue<br></span>
-        }
+            @foreach (var a in scope.Value.Attributes)
+            {
+                <span>@a.Key: @a.Value.StringValue<br></span>
+            }
         </body>
-        <footer>@scope.Version</footer>
+        <footer>@scope.Value.Version</footer>
     </article>
 }
 
