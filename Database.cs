@@ -7,9 +7,9 @@ namespace Signals;
 
 public class Database
 {
-    private const string connectionString = "Data Source=signals.db;Version=3";
+    private const string file = "signals.db";
 
-    private readonly SQLiteConnection connection = new(connectionString);
+    private readonly SQLiteConnection connection = new($"Data Source={file};Version=3;");
 
     public void Create()
     {
@@ -84,7 +84,7 @@ public class Database
 
         CREATE TABLE IF NOT EXISTS scope_spans (
             scope INTEGER,
-            span INTEGER,
+            span TEXT,
             FOREIGN KEY(scope) REFERENCES scopes(id),
             FOREIGN KEY(span) REFERENCES spans(id)
         );
@@ -173,12 +173,14 @@ public class Database
         insertResource.Parameters.AddWithValue("$id", span.SpanId.ToBase64());
         insertResource.Parameters.AddWithValue("$parent", span.ParentSpanId.ToBase64());
         insertResource.Parameters.AddWithValue("$name", span.Name);
+        insertResource.Transaction = transaction;
         await insertResource.ExecuteNonQueryAsync();
         long spanId = connection.LastInsertRowId;
 
         await using SQLiteCommand insertLink = new("INSERT OR IGNORE INTO scope_spans (scope, span) VALUES ($scope, $span)", connection);
         insertLink.Parameters.AddWithValue("$scope", scopeId);
-        insertLink.Parameters.AddWithValue("$span", spanId);
+        insertLink.Parameters.AddWithValue("$span", span.SpanId.ToBase64());
+        insertLink.Transaction = transaction;
         await insertLink.ExecuteNonQueryAsync();
 
         foreach (var a in span.Attributes)
@@ -370,7 +372,7 @@ public class Database
         return Convert.ToInt64(result);
     }
 
-    public async Task<IEnumerable<Resource>> GetResourcesAsync()
+    public async Task<Dictionary<long, Resource>> GetResourcesAsync()
     {
         await using var select = connection.CreateCommand();
         select.CommandText = @"SELECT
@@ -409,11 +411,58 @@ public class Database
 
         }
 
-        return result.Values;
+        return result;
 
     }
 
-    public async Task<IEnumerable<InstrumentationScope>> GetScopesAsync()
+    public async Task<Dictionary<long, InstrumentationScope>> GetScopesAsync(IEnumerable<long> resourceIds)
+    {
+        await using var select = connection.CreateCommand();
+        select.CommandText = @"SELECT
+                                    s.id,
+                                    s.name,
+                                    s.version,
+                                    k.value AS Key,
+                                    v.value AS Value
+                                FROM scopes s
+                                JOIN resource_scopes rs ON rs.scope = s.id
+                                LEFT JOIN scope_attributes sa ON s.id = sa.scope
+                                LEFT JOIN attributes a ON a.id = sa.attribute
+                                LEFT JOIN keys k ON k.id = a.key
+                                LEFT JOIN 'values' v ON v.id = a.value
+                                WHERE rs.resource IN (" + string.Join(",", resourceIds) + @")
+                                ORDER BY s.id;";
+
+        await using var reader = await select.ExecuteReaderAsync();
+
+        Dictionary<long, InstrumentationScope> result = [];
+
+        while (await reader.ReadAsync())
+        {
+
+            long scopeId = reader.GetInt64(0);
+            string key = reader.GetString(1);
+            string value = reader.GetString(2);
+
+            if (!result.ContainsKey(scopeId))
+            {
+                result[scopeId] = new();
+            }
+
+            var val = new AnyValue
+            {
+                StringValue = value
+            };
+
+            result[scopeId].Attributes.Add(new KeyValue { Key = key, Value = val });
+
+        }
+
+        return result;
+
+    }
+
+    public async Task<Dictionary<long, InstrumentationScope>> GetScopesAsync()
     {
         await using var select = connection.CreateCommand();
         select.CommandText = @"SELECT
@@ -454,7 +503,7 @@ public class Database
 
         }
 
-        return result.Values;
+        return result;
 
     }
 
@@ -492,7 +541,65 @@ public class Database
                 };
             }
 
-            if (!reader.IsDBNull(2))
+            if (!reader.IsDBNull(3))
+            {
+
+                string key = reader.GetString(3);
+                string value = reader.GetString(4);
+
+                var val = new AnyValue
+                {
+                    StringValue = value
+                };
+
+                result[spanId].Attributes.Add(new KeyValue { Key = key, Value = val });
+
+            }
+
+
+        }
+
+        return result.Values;
+
+    }
+
+    public async Task<IEnumerable<Span>> GetSpansAsync(IEnumerable<long> scopeIds)
+    {
+        await using var select = connection.CreateCommand();
+        select.CommandText = @"SELECT
+                                    s.id,
+                                    s.parent,
+                                    s.name,
+                                    k.value AS Key,
+                                    v.value AS Value
+                                FROM spans s
+                                JOIN scope_spans ss ON ss.span = s.id
+                                LEFT JOIN span_attributes sa ON s.id = sa.span
+                                LEFT JOIN attributes a ON a.id = sa.attribute
+                                LEFT JOIN keys k ON k.id = a.key
+                                LEFT JOIN 'values' v ON v.id = a.value
+                                WHERE ss.scope IN (" + string.Join(",", scopeIds) + @")
+                                ORDER BY s.parent;";
+
+        await using var reader = await select.ExecuteReaderAsync();
+
+        Dictionary<string, Span> result = [];
+
+        while (await reader.ReadAsync())
+        {
+
+            string spanId = reader.GetString(0);
+            string name = reader.GetString(2);
+
+            if (!result.ContainsKey(spanId))
+            {
+                result[spanId] = new Span
+                {
+                    Name = name
+                };
+            }
+
+            if (!reader.IsDBNull(3))
             {
 
                 string key = reader.GetString(3);

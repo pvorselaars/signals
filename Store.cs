@@ -1,8 +1,11 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Resource.V1;
 using OpenTelemetry.Proto.Trace.V1;
 
 namespace Signals;
+
 public class Store : IAsyncDisposable
 {
     private readonly ILogger<Store> _logger;
@@ -18,9 +21,38 @@ public class Store : IAsyncDisposable
         _timer = new(RefreshAsync, null, 0, 5000);
 
     }
-    public IEnumerable<Resource> Resources { get; private set; } = [];
-    public IEnumerable<InstrumentationScope> Scopes { get; private set; } = [];
+    public Dictionary<long, Resource> Resources { get; private set; } = [];
+    public Dictionary<long, InstrumentationScope> Scopes { get; private set; } = [];
     public IEnumerable<Span> Spans { get; private set; } = [];
+
+    public List<long> SelectedResources { get; private set; } = [];
+    public async Task SelectResource(long resourceId)
+    {
+        SelectedResources.Add(resourceId);
+        SelectedScopes = [];
+        await GetAsync();
+    }
+
+    public async Task DeselectResource(long resourceId)
+    {
+        SelectedResources.Remove(resourceId);
+        SelectedScopes = [];
+        await GetAsync();
+    }
+
+    public List<long> SelectedScopes { get; private set; } = [];
+
+    public async Task SelectScope(long scopeId)
+    {
+        SelectedScopes.Add(scopeId);
+        await GetAsync();
+    }
+
+    public async Task DeselectScope(long scopeId)
+    {
+        SelectedScopes.Remove(scopeId);
+        await GetAsync();
+    }
 
     public event Func<Task>? OnChange;
 
@@ -30,9 +62,7 @@ public class Store : IAsyncDisposable
 
         try
         {
-            Resources = await _db.GetResourcesAsync();
-            Scopes = await _db.GetScopesAsync();
-            Spans = await _db.GetSpansAsync();
+            await GetAsync();
 
             if (OnChange != null)
                 await OnChange.Invoke();
@@ -47,6 +77,13 @@ public class Store : IAsyncDisposable
             _logger.LogError(ex, "Error during refresh");
 
         }
+    }
+
+    private async Task GetAsync()
+    {
+        Resources = await _db.GetResourcesAsync();
+        Scopes = SelectedResources.Count > 0 ? await _db.GetScopesAsync(SelectedResources) : await _db.GetScopesAsync();
+        Spans = SelectedScopes.Count > 0 ? await _db.GetSpansAsync(SelectedScopes) : await _db.GetSpansAsync();
     }
 
     public async ValueTask DisposeAsync()

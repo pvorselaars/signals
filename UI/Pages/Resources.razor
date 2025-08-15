@@ -3,14 +3,24 @@
 
 <PageTitle>Resources</PageTitle>
 
+@{
+}
+
 @foreach (var resource in store.Resources)
 {
-    <article>
+    bool isSelected = store.SelectedResources.Contains(resource.Key);
+    string cssClass = isSelected ? "selected" : "";
+    Action clickHandler = isSelected
+    ? async () => await store.DeselectResource(resource.Key)
+    : async () => await store.SelectResource(resource.Key);
+
+    <article class="@cssClass" @onclick="clickHandler" style="cursor: pointer;">
+
         <body>
-        @foreach (var a in resource.Attributes)
-        {
-            <span>@a.Key: @a.Value.StringValue<br></span>
-        }
+            @foreach (var a in resource.Value.Attributes)
+            {
+                <span>@a.Key: @a.Value.StringValue<br></span>
+            }
         </body>
     </article>
 }
