@@ -36,7 +36,7 @@ builder.Services.AddOpenTelemetry()
                     options.Filter = httpContext =>
                     {
                         var path = httpContext.Request.Path.ToString();
-                        return !path.StartsWith("/opentelemetry") && !path.StartsWith("/_framework");
+                        return !path.StartsWith("/opentelemetry");
                     };
                 }
                 )
@@ -60,6 +60,6 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.MapGrpcService<TracesReceiver>(); 
+app.MapGrpcService<TracesReceiver>();
 
 app.Run();
