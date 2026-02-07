@@ -1,32 +1,48 @@
 ﻿@page "/traces"
-@inject Store store
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+@using static Signals.Database
+
+@inject Query query
+@inject Database db
 
 <PageTitle>Traces</PageTitle>
 
-@foreach (var span in store.Spans)
-{
-    <article>
-        <header>@span.Name</header>
-        @foreach (var a in span.Attributes)
+<Search Placeholder="traces" />
+<table>
+    <thead>
+        <tr>
+            <th>Resource</th>
+            <th>Scope</th>
+            <th>Name</th>
+            <th>Kind</th>
+            <th>Start Time</th>
+            <th>End Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var trace in db.QueryTraces(query))
         {
-            <span>@a.Key: @a.Value.StringValue<br></span>
+            <tr>
+                <td>@trace.ServiceName</td>
+                <td>@trace.ScopeName</td>
+                <td>@trace.SpanName</td>
+                <td>@trace.SpanKind</td>
+                <td>@trace.GetStartTime()</td>
+                <td>@trace.GetEndTime()</td>
+            </tr>
         }
-    </article>
-}
+    </tbody>
+</table>
 
 @code {
     protected override void OnInitialized()
     {
-        store.OnChange += OnStoreChange;
-    }
-
-    private async Task OnStoreChange()
-    {
-        await InvokeAsync(StateHasChanged);
+        query.OnChange += StateHasChanged;
     }
 
     public void Dispose()
     {
-        store.OnChange -= OnStoreChange;
+        query.OnChange -= StateHasChanged;
     }
 }

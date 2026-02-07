@@ -1,0 +1,44 @@
+@page "/metrics"
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+@using Signals.Logs
+@using static Signals.Database
+
+@inject Query query
+@inject Database db
+
+
+<PageTitle>Metrics</PageTitle>
+
+<Search Placeholder="metrics" />
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Type</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var metric in db.QueryMetrics(query))
+        {
+            <tr>
+                <td>@metric.MetricName</td>
+                <td>@metric.Description</td>
+                <td>@metric.MetricType</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+}

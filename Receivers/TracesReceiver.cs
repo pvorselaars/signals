@@ -1,7 +1,7 @@
 using Grpc.Core;
 using OpenTelemetry.Proto.Collector.Trace.V1;
 
-namespace Signals.Trace;
+namespace Signals.Receivers;
 
 public class TracesReceiver(Database db) : TraceService.TraceServiceBase
 {
@@ -10,8 +10,7 @@ public class TracesReceiver(Database db) : TraceService.TraceServiceBase
         ExportTraceServiceRequest request,
         ServerCallContext context)
     {
-        await db.AddAsync(request.ResourceSpans);
-
+        db.InsertTraces(request.ResourceSpans[0]);
         return new ExportTraceServiceResponse();
     }
 

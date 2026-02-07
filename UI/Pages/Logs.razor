@@ -1,0 +1,45 @@
+@page "/logs"
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+@using static Signals.Database
+@inject Query query
+@inject Database db
+
+<PageTitle>Logs</PageTitle>
+
+<Search Placeholder="logs" />
+<table>
+    <thead>
+        <tr>
+            <th>Resource</th>
+            <th>Scope</th>
+            <th>Severity</th>
+            <th>Log</th>
+            <th>Timestamp</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var log in db.QueryLogs(query))
+        {
+            <tr>
+                <td>@log.ServiceName</td>
+                <td>@log.ScopeName</td>
+                <td>@log.SeverityText</td>
+                <td>@log.Body</td>
+                <td>@log.GetTime()</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+}
