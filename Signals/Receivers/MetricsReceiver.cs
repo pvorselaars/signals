@@ -1,5 +1,6 @@
 using Grpc.Core;
 using OpenTelemetry.Proto.Collector.Metrics.V1;
+using Signals.Repository;
 
 namespace Signals.Receivers;
 

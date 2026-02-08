@@ -1,0 +1,148 @@
+﻿@page "/traces"
+@using Signals.Repository
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+@using static Signals.Repository.Database
+@using System.Linq
+
+@inject Database db
+
+<PageTitle>Traces</PageTitle>
+
+<fieldset>
+    <input type="search" placeholder="Search traces..." @bind="query.Text" @bind:event="oninput" />
+    <select id="scope" title="Scope" @bind="query.ScopeName">
+        <option value="">Any scope</option>
+        @foreach (var scope in db.GetUniqueTraceScopes())
+        {
+            <option value="@scope">@scope</option>
+        }
+    </select>
+    <select id="resource" title="Resource" @bind="query.ServiceName">
+        <option value="">Any service</option>
+        @foreach (var service in db.GetUniqueServices())
+        {
+            <option value="@service">@service
+            </option>
+        }
+
+    </select>
+    <input type="datetime-local" title="Start Time" @bind="query.StartTime" />
+    <input type="datetime-local" title="End Time" @bind="query.EndTime" />
+</fieldset>
+<table>
+    <thead>
+        <tr>
+            <th>Service</th>
+            <th>Scope</th>
+            <th>Name</th>
+            <th>Duration</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var trace in db.QueryTraces(query))
+        {
+            <tr @onclick="() => SelectSpan(trace.SpanId)" style="cursor: pointer;"
+                class="@(_selectedSpanId == trace.SpanId ? "active" : "")">
+                <td>@trace.ServiceName</td>
+                <td>@trace.ScopeName</td>
+                <td>@trace.SpanName</td>
+                <td>@GetDuration(trace)</td>
+            </tr>
+
+            @if (_selectedSpanId == trace.SpanId)
+            {
+                var logCount = db.GetLogCountForSpan(trace.TraceId, trace.SpanId);
+                var metrics = db.GetMetricsForSpan(trace);
+                <tr>
+                    <td colspan="4">
+                        <strong>Logs: (@logCount)</strong>
+                        @if (metrics.Any())
+                        {
+                            <br>
+                            <strong>Correlated Metrics: (@metrics.Count)</strong>
+                            <table style="margin: 10px 0;">
+                                <tr><th>Name</th><th>Type</th><th>Value</th><th>Time</th></tr>
+                                @foreach (var metric in metrics.Take(10))
+                                {
+                                    <tr>
+                                        <td>@metric.MetricName</td>
+                                        <td>@metric.MetricType</td>  
+                                        <td>@(metric.ValueDouble?.ToString("F3") ?? metric.ValueInt?.ToString() ?? metric.Count?.ToString() ?? "N/A")</td>
+                                        <td>@DateTimeOffset.FromUnixTimeMilliseconds(metric.TimeUnixNano / 1_000_000).ToLocalTime().ToString("HH:mm:ss.fff")</td>
+                                    </tr>
+                                }
+                            </table>
+                        }
+                        <pre>@System.Text.Json.JsonSerializer.Serialize(trace, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                    </td>
+                </tr>
+            }
+        }
+
+    </tbody>
+</table>
+
+@code {
+    
+    [Inject(Key = "traces")]
+    private Query query { get; set; } = null!;
+
+    private string? _selectedSpanId;
+
+    private void SelectSpan(string spanId)
+    {
+        if (_selectedSpanId == spanId)
+        {
+            _selectedSpanId = null;
+        }
+        else
+        {
+            _selectedSpanId = spanId;
+        }
+    }
+
+    private string GetDuration(TraceRecord trace)
+    {
+        var nanoseconds = trace.EndTimeUnixNano - trace.StartTimeUnixNano;
+        var duration = TimeSpan.FromTicks(nanoseconds / 100); // Convert nanoseconds to ticks (1 tick = 100 ns)
+
+        if (nanoseconds < 1000)
+        {
+            return $"{nanoseconds} ns";
+        }
+        else if (nanoseconds < 1_000_000)
+        {
+            var microseconds = nanoseconds / 1000.0;
+            return $"{microseconds:F0} µs";
+        }
+        else if (nanoseconds < 1_000_000_000)
+        {
+            var milliseconds = nanoseconds / 1_000_000.0;
+            return $"{milliseconds:F0} ms";
+        }
+        else if (duration.TotalSeconds < 60)
+        {
+            return $"{duration.TotalSeconds:F0} s";
+        }
+        else if (duration.TotalMinutes < 60)
+        {
+            return $"{duration.TotalMinutes:F0} m";
+        }
+        else
+        {
+            return $"{duration.TotalHours:F0} h";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+
+}

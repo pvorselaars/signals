@@ -1,6 +1,0 @@
-[submodule "Protos/OpenTelemetry"]
-	path = Protos/OpenTelemetry
-	url = https://github.com/open-telemetry/opentelemetry-proto.git
-[submodule "wwwroot/styles"]
-	path = wwwroot/styles
-	url = git@github.com:pvorselaars/semantic.css

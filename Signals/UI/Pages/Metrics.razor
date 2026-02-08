@@ -1,0 +1,87 @@
+@page "/metrics"
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+@using OpenTelemetry.Metrics
+@using Signals.Repository
+@using static Signals.Repository.Database
+
+@inject Database db
+
+<PageTitle>Metrics</PageTitle>
+
+<fieldset>
+    <input type="search" placeholder="Search metrics..." @bind="query.Text" @bind:event="oninput" />
+    <select id="scope" title="Scope" @bind="query.ScopeName">
+        <option value="">Any scope</option>
+        @foreach (var scope in db.GetUniqueMetricScopes())
+        {
+            <option value="@scope">@scope</option>
+        }
+    </select>
+    <select id="resource" title="Resource" @bind="query.ServiceName">
+        <option value="">Any service</option>
+        @foreach (var service in db.GetUniqueServices())
+        {
+            <option value="@service">@service
+            </option>
+        }
+
+    </select>
+    <input type="datetime-local" title="Start Time" @bind="query.StartTime" />
+    <input type="datetime-local" title="End Time" @bind="query.EndTime" />
+</fieldset>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Value</th>
+            <th>Sum</th>
+            <th>Max</th>
+            <th>Min</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var metric in db.QueryMetrics(query))
+        {
+            <tr>
+                <td>@metric.MetricName</td>
+                <td>@metric.Description</td>
+                <td>@metric.MetricType</td>
+                @if (metric.ValueDouble.HasValue)
+                {
+                    <td>@metric.ValueDouble.Value.ToString()</td>
+                }
+                else if (metric.ValueInt.HasValue)
+                {
+                    <td>@metric.ValueInt.Value.ToString()</td>
+                }
+                else
+                {
+                    <td>N/A</td>
+                }
+                <td>@(metric.SumValue.HasValue? metric.SumValue.Value.ToString() : "N/A")</td>
+                <td>@(metric.MaxValue.HasValue? metric.MaxValue.Value.ToString() : "N/A")</td>
+                <td>@(metric.MinValue.HasValue? metric.MinValue.Value.ToString() : "N/A")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+
+    [Inject(Key = "metrics")]
+    private Query query { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+
+}

@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
-using Signals;
 using Signals.UI;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -8,6 +7,9 @@ using OpenTelemetry.Trace;
 using OpenTelemetry.Logs;
 using System.Reflection;
 using Signals.Receivers;
+using OpenTelemetry;
+using System.Diagnostics;
+using Signals.Repository;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,7 +29,9 @@ builder.WebHost.ConfigureKestrel(options =>
 
 
 builder.Services.AddSingleton<Database>();
-builder.Services.AddScoped<Database.Query>();
+builder.Services.AddKeyedScoped<Database.Query>("traces");
+builder.Services.AddKeyedScoped<Database.Query>("logs");
+builder.Services.AddKeyedScoped<Database.Query>("metrics");
 builder.Services.AddGrpc();
 
 builder.Services.AddRazorComponents()
@@ -48,7 +52,16 @@ builder.Services.AddOpenTelemetry()
                         })
                         .AddOtlpExporter())
                 .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation()
-                        .AddOtlpExporter())
+                        .AddOtlpExporter(options =>
+                        {
+                            options.BatchExportProcessorOptions = new BatchExportProcessorOptions<Activity>
+                            {
+                                ExporterTimeoutMilliseconds = 10000,
+                                MaxExportBatchSize = 512,
+                                ScheduledDelayMilliseconds = 1000,
+                                MaxQueueSize = 2048
+                            };
+                        }))
                 .WithLogging(logging => logging.AddOtlpExporter());
 
 StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
