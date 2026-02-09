@@ -7,7 +7,8 @@ using Google.Protobuf;
 using Signals.Repository;
 using static Signals.Repository.Database;
 
-namespace Signals.Tests;
+namespace Tests;
+
 
 [TestClass]
 public class IntegrationTests
@@ -26,10 +27,6 @@ public class IntegrationTests
     public void Cleanup()
     {
         _database?.Dispose();
-        if (File.Exists(_testDbPath))
-        {
-            File.Delete(_testDbPath);
-        }
     }
 
     [TestMethod]
@@ -60,7 +57,7 @@ public class IntegrationTests
 
         // 1. Verify traces are inserted with proper hierarchy
         var allTraces = _database.QueryTraces(new Query());
-        Assert.AreEqual(2, allTraces.Count);
+        Assert.HasCount(2, allTraces);
 
         var rootSpan = allTraces.FirstOrDefault(t => t.ParentSpanId == null);
         var childSpan = allTraces.FirstOrDefault(t => t.ParentSpanId != null);
@@ -79,14 +76,14 @@ public class IntegrationTests
 
         // 3. Verify logs can be queried independently
         var allLogs = _database.QueryLogs(new Query());
-        Assert.AreEqual(3, allLogs.Count);
+        Assert.HasCount(3, allLogs);
 
         var errorLogs = _database.QueryLogs(new Query { MinSeverity = 17 }); // ERROR level
-        Assert.AreEqual(1, errorLogs.Count);
+        Assert.HasCount(1, errorLogs);
 
         // 4. Verify metrics correlation with spans
         var correlatedMetrics = _database.GetMetricsForSpan(rootSpan);
-        Assert.IsTrue(correlatedMetrics.Count > 0);
+        Assert.IsNotEmpty(correlatedMetrics);
         Assert.IsTrue(correlatedMetrics.All(m => m.ServiceName == "integration-test-service"));
 
         // 5. Verify complex queries work
@@ -95,9 +92,9 @@ public class IntegrationTests
         var serviceLogs = _database.QueryLogs(serviceQuery);
         var serviceMetrics = _database.QueryMetrics(serviceQuery);
 
-        Assert.AreEqual(2, serviceTraces.Count);
-        Assert.AreEqual(3, serviceLogs.Count);
-        Assert.IsTrue(serviceMetrics.Count > 0);
+        Assert.HasCount(2, serviceTraces);
+        Assert.HasCount(3, serviceLogs);
+        Assert.IsNotEmpty(serviceMetrics);
 
         // 6. Verify time-based queries
         var timeQuery = new Query
@@ -110,9 +107,9 @@ public class IntegrationTests
         var timeFilteredLogs = _database.QueryLogs(timeQuery);
         var timeFilteredMetrics = _database.QueryMetrics(timeQuery);
 
-        Assert.AreEqual(2, timeFilteredTraces.Count);
-        Assert.AreEqual(3, timeFilteredLogs.Count);
-        Assert.IsTrue(timeFilteredMetrics.Count > 0);
+        Assert.HasCount(2, timeFilteredTraces);
+        Assert.HasCount(3, timeFilteredLogs);
+        Assert.IsNotEmpty(timeFilteredMetrics);
     }
 
     [TestMethod]
@@ -141,10 +138,10 @@ public class IntegrationTests
         var service1LogsResult = _database.QueryLogs(service1Query);
         var service2LogsResult = _database.QueryLogs(service2Query);
 
-        Assert.AreEqual(1, service1TracesResult.Count);
-        Assert.AreEqual(1, service2TracesResult.Count);
-        Assert.AreEqual(1, service1LogsResult.Count);
-        Assert.AreEqual(1, service2LogsResult.Count);
+        Assert.HasCount(1, service1TracesResult);
+        Assert.HasCount(1, service2TracesResult);
+        Assert.HasCount(1, service1LogsResult);
+        Assert.HasCount(1, service2LogsResult);
 
         Assert.IsTrue(service1TracesResult.All(t => t.ServiceName == "service-1"));
         Assert.IsTrue(service2TracesResult.All(t => t.ServiceName == "service-2"));

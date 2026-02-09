@@ -7,7 +7,8 @@ using Google.Protobuf;
 using Signals.Repository;
 using static Signals.Repository.Database;
 
-namespace Signals.Tests;
+[assembly: Parallelize(Workers = 1, Scope = ExecutionScope.MethodLevel)] // Ensure tests run sequentially to avoid database conflicts
+namespace Tests;
 
 [TestClass]
 public class DatabaseTests
@@ -19,20 +20,18 @@ public class DatabaseTests
     public void Setup()
     {
         // Create a unique test database for each test
-        _testDbPath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
+        _testDbPath = "tests.db";
+        if (File.Exists(_testDbPath))
+            File.Delete(_testDbPath);
 
         // We'll need to modify Database to accept a connection string
-        _database = new Database(_testDbPath);
+        _database = new Database($"Data Source={_testDbPath}");
     }
 
     [TestCleanup]
     public void Cleanup()
     {
         _database?.Dispose();
-        if (File.Exists(_testDbPath))
-        {
-            File.Delete(_testDbPath);
-        }
     }
 
     [TestMethod]
@@ -48,7 +47,7 @@ public class DatabaseTests
         var query = new Query();
         var logs = _database.QueryLogs(query);
 
-        Assert.AreEqual(2, logs.Count);
+        Assert.HasCount(2, logs);
         Assert.AreEqual("test-service", logs[0].ServiceName);
         Assert.AreEqual("Test log message 1", logs[0].Body);
         Assert.AreEqual(9, logs[0].SeverityNumber); // INFO level
@@ -67,9 +66,9 @@ public class DatabaseTests
         var query = new Query();
         var traces = _database.QueryTraces(query);
 
-        Assert.AreEqual(2, traces.Count);
-        Assert.AreEqual("test-service", traces[0].ServiceName);
-        Assert.AreEqual("root-span", traces[0].SpanName);
+        Assert.HasCount(2, traces);
+        Assert.AreEqual("test-service", traces[1].ServiceName);
+        Assert.AreEqual("root-span", traces[1].SpanName);
     }
 
     [TestMethod]
@@ -85,7 +84,7 @@ public class DatabaseTests
         var query = new Query();
         var metrics = _database.QueryMetrics(query);
 
-        Assert.AreEqual(2, metrics.Count);
+        Assert.HasCount(2, metrics);
         Assert.AreEqual("test-service", metrics[0].ServiceName);
         Assert.AreEqual("test.counter", metrics[0].MetricName);
     }
@@ -103,14 +102,14 @@ public class DatabaseTests
         var query = new Query();
         var traces = _database.QueryTraces(query);
 
-        Assert.AreEqual(3, traces.Count);
+        Assert.HasCount(3, traces);
 
         // Verify parent-child relationships exist
         var rootSpan = traces.First(t => t.ParentSpanId == null);
         var childSpans = traces.Where(t => t.ParentSpanId != null).ToList();
 
         Assert.IsNotNull(rootSpan);
-        Assert.AreEqual(2, childSpans.Count);
+        Assert.HasCount(2, childSpans);
     }
 
     [TestMethod]
@@ -150,7 +149,7 @@ public class DatabaseTests
         var metrics = _database.GetMetricsForSpan(span);
 
         // Assert
-        Assert.IsTrue(metrics.Count > 0);
+        Assert.IsNotEmpty(metrics);
         Assert.AreEqual("test-service", metrics[0].ServiceName);
     }
 
@@ -166,8 +165,9 @@ public class DatabaseTests
         var logs = _database.QueryLogs(query);
 
         // Assert
-        Assert.AreEqual(1, logs.Count);
-        Assert.IsTrue(logs[0].Body!.Contains("message 1"));
+        Assert.HasCount(1, logs);
+        Assert.IsNotNull(logs[0].Body);
+        Assert.Contains("message 1", logs[0].Body!);
     }
 
     [TestMethod]
@@ -182,7 +182,7 @@ public class DatabaseTests
         var traces = _database.QueryTraces(query);
 
         // Assert
-        Assert.AreEqual(2, traces.Count);
+        Assert.HasCount(2, traces);
         Assert.IsTrue(traces.All(t => t.ServiceName == "test-service"));
     }
 
@@ -203,7 +203,7 @@ public class DatabaseTests
         var metrics = _database.QueryMetrics(query);
 
         // Assert
-        Assert.IsTrue(metrics.Count > 0);
+        Assert.IsNotEmpty(metrics);
     }
 
     [TestMethod]
@@ -219,7 +219,7 @@ public class DatabaseTests
         var query = new Query();
         var metrics = _database.QueryMetrics(query);
 
-        Assert.AreEqual(10, metrics.Count); // Should have all 10 data points
+        Assert.HasCount(10, metrics); // Should have all 10 data points
     }
 
     // Helper methods to create test data
@@ -244,7 +244,7 @@ public class DatabaseTests
 
         scopeLogs.LogRecords.Add(new OpenTelemetry.Proto.Logs.V1.LogRecord
         {
-            TimeUnixNano = baseTime + 1_000_000,
+            TimeUnixNano = baseTime - 1_000_000,
             SeverityNumber = SeverityNumber.Error,
             SeverityText = "ERROR",
             Body = new AnyValue { StringValue = "Test log message 2" }
@@ -290,8 +290,8 @@ public class DatabaseTests
             SpanId = ByteString.CopyFrom(new byte[8] { 1, 2, 3, 4, 5, 6, 7, 8 }),
             Name = "root-span",
             Kind = Span.Types.SpanKind.Server,
-            StartTimeUnixNano = baseTime,
-            EndTimeUnixNano = baseTime + 1_000_000_000 // 1 second duration
+            StartTimeUnixNano = baseTime - 1_000_000_000, // 1 second duration
+            EndTimeUnixNano = baseTime
         });
 
         scopeSpans.Spans.Add(new Span
@@ -300,8 +300,8 @@ public class DatabaseTests
             SpanId = ByteString.CopyFrom(new byte[8] { 9, 10, 11, 12, 13, 14, 15, 16 }),
             Name = "child-span",
             Kind = Span.Types.SpanKind.Internal,
-            StartTimeUnixNano = baseTime + 100_000_000,
-            EndTimeUnixNano = baseTime + 500_000_000
+            StartTimeUnixNano = baseTime - 500_000_000,
+            EndTimeUnixNano = baseTime - 250_000_000
         });
 
         var resourceSpans = new ResourceSpans { Resource = resource };

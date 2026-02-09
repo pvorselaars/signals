@@ -4,8 +4,6 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Folder Name="/Tests/">
-    <Project Path="Tests/Signals.Tests.csproj" />
-  </Folder>
-  <Project Path="Signals.csproj" />
+  <Project Path="Signals.Tests/Tests.csproj" />
+  <Project Path="Signals/Signals.csproj" />
 </Solution>
