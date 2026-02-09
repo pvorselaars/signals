@@ -240,7 +240,7 @@ public sealed partial class Database : IDisposable
         return scopes;
     }
 
-    public List<MetricRecord> GetMetricsForSpan(TraceRecord span)
+    public List<MetricRecord> GetMetricsForTrace(TraceRecord trace)
     {
         var command = _connection.CreateCommand();
 
@@ -259,9 +259,9 @@ public sealed partial class Database : IDisposable
             ORDER BY dp.time_unix_nano
         ";
 
-        command.Parameters.AddWithValue("@service_name", span.ServiceName);
-        command.Parameters.AddWithValue("@start_time", span.StartTimeUnixNano);
-        command.Parameters.AddWithValue("@end_time", span.EndTimeUnixNano);
+        command.Parameters.AddWithValue("@service_name", trace.ServiceName);
+        command.Parameters.AddWithValue("@start_time", trace.StartTimeUnixNano);
+        command.Parameters.AddWithValue("@end_time", trace.EndTimeUnixNano);
 
         var results = new List<MetricRecord>();
         using var reader = command.ExecuteReader();

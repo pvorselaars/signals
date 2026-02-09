@@ -164,16 +164,29 @@ public sealed partial class Database : IDisposable
         return results;
     }
 
-    public long GetLogCountForSpan(string traceId, string spanId)
+    public long GetLogCountForTrace(string traceId)
     {
         var command = _connection.CreateCommand();
         command.CommandText = @"
             SELECT COUNT(*) 
             FROM logs l
             JOIN resources r ON l.resource_id = r.id
-            WHERE l.trace_id = @trace_id AND l.span_id = @span_id
+            WHERE l.trace_id = @trace_id
         ";
         command.Parameters.AddWithValue("@trace_id", traceId);
+
+        return (long)command.ExecuteScalar()!;
+    }
+
+    public long GetLogCountForSpan(string spanId)
+    {
+        var command = _connection.CreateCommand();
+        command.CommandText = @"
+            SELECT COUNT(*) 
+            FROM logs l
+            JOIN resources r ON l.resource_id = r.id
+            WHERE l.span_id = @span_id
+        ";
         command.Parameters.AddWithValue("@span_id", spanId);
 
         return (long)command.ExecuteScalar()!;

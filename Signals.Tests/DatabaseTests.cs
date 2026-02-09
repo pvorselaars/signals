@@ -11,16 +11,18 @@ using static Signals.Repository.Database;
 namespace Tests;
 
 [TestClass]
-public class DatabaseTests
+public class DatabaseTests(TestContext context)
 {
     private Database _database = null!;
     private string _testDbPath = null!;
+
+    public TestContext TestContext { get; set; } = context;
 
     [TestInitialize]
     public void Setup()
     {
         // Create a unique test database for each test
-        _testDbPath = "tests.db";
+        _testDbPath = $"TestData_{TestContext.TestName}.db";
         if (File.Exists(_testDbPath))
             File.Delete(_testDbPath);
 
@@ -113,20 +115,29 @@ public class DatabaseTests
     }
 
     [TestMethod]
-    public void GetLogCountForSpan_ShouldReturnCorrectCount()
+    public void GetLogCountForTrace_ShouldReturnCorrectCount()
     {
         // Arrange
         var resourceLogs = CreateTestResourceLogsWithTraceContext();
-        var resourceSpans = CreateTestResourceSpans();
+        var traceId = ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
+        var spanId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8]);
+
+        foreach (var scopeLog in resourceLogs.ScopeLogs)
+        {
+            foreach (var logRecord in scopeLog.LogRecords)
+            {
+                logRecord.TraceId = traceId;
+                logRecord.SpanId = spanId;
+            }
+        }
+
+        var resourceSpans = CreateTestResourceSpans(traceId);
+
+        _database.InsertTraces(resourceSpans);
+        _database.InsertLogs(resourceLogs);
 
         // Act
-        _database.InsertLogs(resourceLogs);
-        _database.InsertTraces(resourceSpans);
-
-        var spans = _database.QueryTraces(new Query());
-        var span = spans.First();
-
-        var logCount = _database.GetLogCountForSpan(span.TraceId, span.SpanId);
+        var logCount = _database.GetLogCountForTrace(Convert.ToHexString(traceId.ToByteArray()));
 
         // Assert
         Assert.AreEqual(2, logCount);
@@ -136,17 +147,18 @@ public class DatabaseTests
     public void GetMetricsForSpan_ShouldReturnCorrelatedMetrics()
     {
         // Arrange
-        var resourceMetrics = CreateTestResourceMetrics();
-        var resourceSpans = CreateTestResourceSpans();
+        var time = DateTimeOffset.UtcNow;
+        var resourceMetrics = CreateTestResourceMetrics(time);
+        var resourceSpans = CreateTestResourceSpans(null, time);
 
         // Act
         _database.InsertMetrics(resourceMetrics);
         _database.InsertTraces(resourceSpans);
 
-        var spans = _database.QueryTraces(new Query());
-        var span = spans.First();
+        // Query root span
+        var spans = _database.QueryTraces(new Query { ParentSpanId = "" } );
 
-        var metrics = _database.GetMetricsForSpan(span);
+        var metrics = _database.GetMetricsForTrace(spans[0]);
 
         // Assert
         Assert.IsNotEmpty(metrics);
@@ -190,9 +202,9 @@ public class DatabaseTests
     public void QueryMetrics_WithTimeRange_ShouldReturnMatchingMetrics()
     {
         // Arrange
-        _database.InsertMetrics(CreateTestResourceMetrics());
-
         var baseTime = DateTimeOffset.UtcNow.AddHours(-1);
+        _database.InsertMetrics(CreateTestResourceMetrics(baseTime));
+
         var query = new Query
         {
             StartTime = baseTime.AddMinutes(-30),
@@ -259,7 +271,7 @@ public class DatabaseTests
     {
         var resourceLogs = CreateTestResourceLogs();
         var traceId = ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
-        var spanId = ByteString.CopyFrom(new byte[8] { 1, 2, 3, 4, 5, 6, 7, 8 });
+        var spanId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8]);
 
         foreach (var scopeLog in resourceLogs.ScopeLogs)
         {
@@ -273,7 +285,7 @@ public class DatabaseTests
         return resourceLogs;
     }
 
-    private ResourceSpans CreateTestResourceSpans()
+    private ResourceSpans CreateTestResourceSpans(ByteString? traceId = null, DateTimeOffset? time = null)
     {
         var resource = CreateTestResource();
         var scopeSpans = new ScopeSpans
@@ -281,13 +293,15 @@ public class DatabaseTests
             Scope = new InstrumentationScope { Name = "test-scope" }
         };
 
-        var baseTime = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() * 1_000_000_000);
-        var traceId = ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
+        time ??= DateTimeOffset.UtcNow;
+        var baseTime = (ulong)(time.Value.ToUnixTimeSeconds() * 1_000_000_000);
+
+        traceId ??= ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
 
         scopeSpans.Spans.Add(new Span
         {
             TraceId = traceId,
-            SpanId = ByteString.CopyFrom(new byte[8] { 1, 2, 3, 4, 5, 6, 7, 8 }),
+            SpanId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8]),
             Name = "root-span",
             Kind = Span.Types.SpanKind.Server,
             StartTimeUnixNano = baseTime - 1_000_000_000, // 1 second duration
@@ -297,7 +311,8 @@ public class DatabaseTests
         scopeSpans.Spans.Add(new Span
         {
             TraceId = traceId,
-            SpanId = ByteString.CopyFrom(new byte[8] { 9, 10, 11, 12, 13, 14, 15, 16 }),
+            SpanId = ByteString.CopyFrom([9, 10, 11, 12, 13, 14, 15, 16]),
+            ParentSpanId = scopeSpans.Spans[0].SpanId,
             Name = "child-span",
             Kind = Span.Types.SpanKind.Internal,
             StartTimeUnixNano = baseTime - 500_000_000,
@@ -319,11 +334,10 @@ public class DatabaseTests
 
         var baseTime = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() * 1_000_000_000);
         var traceId = ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
-        var rootSpanId = ByteString.CopyFrom(new byte[8] { 1, 1, 1, 1, 1, 1, 1, 1 });
-        var child1SpanId = ByteString.CopyFrom(new byte[8] { 2, 2, 2, 2, 2, 2, 2, 2 });
-        var child2SpanId = ByteString.CopyFrom(new byte[8] { 3, 3, 3, 3, 3, 3, 3, 3 });
+        var rootSpanId = ByteString.CopyFrom([1, 1, 1, 1, 1, 1, 1, 1]);
+        var child1SpanId = ByteString.CopyFrom([2, 2, 2, 2, 2, 2, 2, 2]);
+        var child2SpanId = ByteString.CopyFrom([3, 3, 3, 3, 3, 3, 3, 3]);
 
-        // Add in wrong order - children first, then parent
         scopeSpans.Spans.Add(new Span
         {
             TraceId = traceId,
@@ -331,8 +345,8 @@ public class DatabaseTests
             ParentSpanId = rootSpanId,
             Name = "child-span-1",
             Kind = Span.Types.SpanKind.Internal,
-            StartTimeUnixNano = baseTime + 100_000_000,
-            EndTimeUnixNano = baseTime + 300_000_000
+            StartTimeUnixNano = baseTime - 100_000_000,
+            EndTimeUnixNano = baseTime - 300_000_000
         });
 
         scopeSpans.Spans.Add(new Span
@@ -342,8 +356,8 @@ public class DatabaseTests
             ParentSpanId = rootSpanId,
             Name = "child-span-2",
             Kind = Span.Types.SpanKind.Internal,
-            StartTimeUnixNano = baseTime + 400_000_000,
-            EndTimeUnixNano = baseTime + 600_000_000
+            StartTimeUnixNano = baseTime - 400_000_000,
+            EndTimeUnixNano = baseTime - 600_000_000
         });
 
         scopeSpans.Spans.Add(new Span
@@ -352,8 +366,8 @@ public class DatabaseTests
             SpanId = rootSpanId,
             Name = "root-span",
             Kind = Span.Types.SpanKind.Server,
-            StartTimeUnixNano = baseTime,
-            EndTimeUnixNano = baseTime + 1_000_000_000
+            StartTimeUnixNano = baseTime - 1_000_000_000,
+            EndTimeUnixNano = baseTime
         });
 
         var resourceSpans = new ResourceSpans { Resource = resource };
@@ -361,7 +375,7 @@ public class DatabaseTests
         return resourceSpans;
     }
 
-    private ResourceMetrics CreateTestResourceMetrics()
+    private ResourceMetrics CreateTestResourceMetrics(DateTimeOffset? time = null)
     {
         var resource = CreateTestResource();
         var scopeMetrics = new ScopeMetrics
@@ -369,9 +383,10 @@ public class DatabaseTests
             Scope = new InstrumentationScope { Name = "test-scope" }
         };
 
-        var baseTime = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() * 1_000_000_000);
+        time ??= DateTimeOffset.UtcNow;
 
-        // Counter metric
+        var baseTime = (ulong)(time.Value.ToUnixTimeSeconds() * 1_000_000_000);
+
         var counterMetric = new Metric
         {
             Name = "test.counter",
@@ -385,11 +400,10 @@ public class DatabaseTests
 
         counterMetric.Sum.DataPoints.Add(new NumberDataPoint
         {
-            TimeUnixNano = baseTime,
+            TimeUnixNano = baseTime - 1_000_000,
             AsInt = 42
         });
 
-        // Gauge metric  
         var gaugeMetric = new Metric
         {
             Name = "test.gauge",
@@ -400,7 +414,7 @@ public class DatabaseTests
 
         gaugeMetric.Gauge.DataPoints.Add(new NumberDataPoint
         {
-            TimeUnixNano = baseTime + 1_000_000,
+            TimeUnixNano = baseTime - 2_000_000,
             AsDouble = 85.5
         });
 
@@ -438,7 +452,7 @@ public class DatabaseTests
         {
             counterMetric.Sum.DataPoints.Add(new NumberDataPoint
             {
-                TimeUnixNano = baseTime + (ulong)(i * 1_000_000),
+                TimeUnixNano = baseTime - (ulong)(i * 1_000_000),
                 AsInt = i * 10
             });
         }
@@ -450,7 +464,7 @@ public class DatabaseTests
         return resourceMetrics;
     }
 
-    private Resource CreateTestResource()
+    private static Resource CreateTestResource()
     {
         var resource = new Resource();
 

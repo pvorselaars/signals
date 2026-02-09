@@ -52,11 +52,11 @@
 
             @if (_selectedSpanId == trace.SpanId)
             {
-                var logCount = db.GetLogCountForSpan(trace.TraceId, trace.SpanId);
-                var metrics = db.GetMetricsForSpan(trace);
+                var logCount = db.GetLogCountForTrace(trace.TraceId);
+                var metrics = db.GetMetricsForTrace(trace);
                 <tr>
                     <td colspan="4">
-                        <strong>Logs: (@logCount)</strong>
+                        <strong>Logs: @logCount</strong>
                         @if (metrics.Any())
                         {
                             <br>
@@ -74,7 +74,6 @@
                                 }
                             </table>
                         }
-                        <pre>@System.Text.Json.JsonSerializer.Serialize(trace, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
                     </td>
                 </tr>
             }

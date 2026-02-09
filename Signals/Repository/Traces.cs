@@ -90,8 +90,7 @@ public sealed partial class Database : IDisposable
         {
             conditions.Add("t.parent_span_id = @parent_span_id");
             command.Parameters.AddWithValue("@parent_span_id", query.ParentSpanId);
-        }
-        else
+        } else if (query.ParentSpanId == string.Empty) // Special case to filter root spans
         {
             conditions.Add("t.parent_span_id IS NULL");
         }
