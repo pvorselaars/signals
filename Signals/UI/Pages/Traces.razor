@@ -1,4 +1,5 @@
 ﻿@page "/traces"
+@using Google.Protobuf
 @using Signals.Repository
 @rendermode RenderMode.InteractiveServer
 @implements IDisposable
@@ -40,20 +41,20 @@
         </tr>
     </thead>
     <tbody>
-        @foreach (var trace in db.QueryTraces(query))
+        @foreach (var span in db.QuerySpans(query))
         {
-            <tr @onclick="() => SelectSpan(trace.SpanId)" style="cursor: pointer;"
-                class="@(_selectedSpanId == trace.SpanId ? "active" : "")">
-                <td>@trace.ServiceName</td>
-                <td>@trace.ScopeName</td>
-                <td>@trace.SpanName</td>
-                <td>@GetDuration(trace)</td>
+            <tr @onclick="() => SelectSpan(span.SpanId)" style="cursor: pointer;"
+                class="@(_selectedSpanId == span.SpanId ? "active" : "")">
+                <td>@span.ServiceName</td>
+                <td>@span.ScopeName</td>
+                <td>@span.Name</td>
+                <td>@span.GetFormattedDuration()</td>
             </tr>
 
-            @if (_selectedSpanId == trace.SpanId)
+            @if (_selectedSpanId == span.SpanId)
             {
-                var logCount = db.GetLogCountForTrace(trace.TraceId);
-                var metrics = db.GetMetricsForTrace(trace);
+                var logCount = db.GetLogCountForTrace(span.TraceId);
+                var metrics = db.GetMetricsForTrace(span);
                 <tr>
                     <td colspan="4">
                         <strong>Logs: @logCount</strong>
@@ -87,9 +88,9 @@
     [Inject(Key = "traces")]
     private Query query { get; set; } = null!;
 
-    private string? _selectedSpanId;
+    private ByteString? _selectedSpanId;
 
-    private void SelectSpan(string spanId)
+    private void SelectSpan(ByteString spanId)
     {
         if (_selectedSpanId == spanId)
         {
@@ -98,39 +99,6 @@
         else
         {
             _selectedSpanId = spanId;
-        }
-    }
-
-    private string GetDuration(TraceRecord trace)
-    {
-        var nanoseconds = trace.EndTimeUnixNano - trace.StartTimeUnixNano;
-        var duration = TimeSpan.FromTicks(nanoseconds / 100); // Convert nanoseconds to ticks (1 tick = 100 ns)
-
-        if (nanoseconds < 1000)
-        {
-            return $"{nanoseconds} ns";
-        }
-        else if (nanoseconds < 1_000_000)
-        {
-            var microseconds = nanoseconds / 1000.0;
-            return $"{microseconds:F0} µs";
-        }
-        else if (nanoseconds < 1_000_000_000)
-        {
-            var milliseconds = nanoseconds / 1_000_000.0;
-            return $"{milliseconds:F0} ms";
-        }
-        else if (duration.TotalSeconds < 60)
-        {
-            return $"{duration.TotalSeconds:F0} s";
-        }
-        else if (duration.TotalMinutes < 60)
-        {
-            return $"{duration.TotalMinutes:F0} m";
-        }
-        else
-        {
-            return $"{duration.TotalHours:F0} h";
         }
     }
 

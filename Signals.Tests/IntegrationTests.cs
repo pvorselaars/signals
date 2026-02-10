@@ -58,16 +58,16 @@ public class IntegrationTests(TestContext testContext)
         // Assert - Verify data integrity and correlations
 
         // 1. Verify traces are inserted with proper hierarchy
-        var allTraces = _database.QueryTraces(new Query());
+        var allTraces = _database.QuerySpans(new Query());
         Assert.HasCount(2, allTraces);
 
-        var rootSpan = allTraces.FirstOrDefault(t => t.ParentSpanId == null);
-        var childSpan = allTraces.FirstOrDefault(t => t.ParentSpanId != null);
+        var rootSpan = allTraces.FirstOrDefault(t => t.ParentSpanId == ByteString.Empty);
+        var childSpan = allTraces.FirstOrDefault(t => t.ParentSpanId != ByteString.Empty);
 
         Assert.IsNotNull(rootSpan);
         Assert.IsNotNull(childSpan);
-        Assert.AreEqual("api-request", rootSpan.SpanName);
-        Assert.AreEqual("database-query", childSpan.SpanName);
+        Assert.AreEqual("api-request", rootSpan.Name);
+        Assert.AreEqual("database-query", childSpan.Name);
 
         // 2. Verify logs are correlated to spans
         var logCount = _database.GetLogCountForSpan(rootSpan.SpanId);
@@ -90,7 +90,7 @@ public class IntegrationTests(TestContext testContext)
 
         // 5. Verify complex queries work
         var serviceQuery = new Query { ServiceName = "integration-test-service" };
-        var serviceTraces = _database.QueryTraces(serviceQuery);
+        var serviceTraces = _database.QuerySpans(serviceQuery);
         var serviceLogs = _database.QueryLogs(serviceQuery);
         var serviceMetrics = _database.QueryMetrics(serviceQuery);
 
@@ -105,7 +105,7 @@ public class IntegrationTests(TestContext testContext)
             EndTime = DateTimeOffset.FromUnixTimeMilliseconds((long)baseTime / 1_000_000).AddSeconds(10)
         };
 
-        var timeFilteredTraces = _database.QueryTraces(timeQuery);
+        var timeFilteredTraces = _database.QuerySpans(timeQuery);
         var timeFilteredLogs = _database.QueryLogs(timeQuery);
         var timeFilteredMetrics = _database.QueryMetrics(timeQuery);
 
@@ -134,8 +134,8 @@ public class IntegrationTests(TestContext testContext)
         var service1Query = new Query { ServiceName = "service-1" };
         var service2Query = new Query { ServiceName = "service-2" };
 
-        var service1TracesResult = _database.QueryTraces(service1Query);
-        var service2TracesResult = _database.QueryTraces(service2Query);
+        var service1TracesResult = _database.QuerySpans(service1Query);
+        var service2TracesResult = _database.QuerySpans(service2Query);
 
         var service1LogsResult = _database.QueryLogs(service1Query);
         var service2LogsResult = _database.QueryLogs(service2Query);

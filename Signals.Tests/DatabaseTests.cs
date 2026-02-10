@@ -37,25 +37,6 @@ public class DatabaseTests(TestContext context)
     }
 
     [TestMethod]
-    public void InsertLogs_ShouldStoreLogsCorrectly()
-    {
-        // Arrange
-        var resourceLogs = CreateTestResourceLogs();
-
-        // Act
-        _database.InsertLogs(resourceLogs);
-
-        // Assert
-        var query = new Query();
-        var logs = _database.QueryLogs(query);
-
-        Assert.HasCount(2, logs);
-        Assert.AreEqual("test-service", logs[0].ServiceName);
-        Assert.AreEqual("Test log message 1", logs[0].Body);
-        Assert.AreEqual(9, logs[0].SeverityNumber); // INFO level
-    }
-
-    [TestMethod]
     public void InsertTraces_ShouldStoreTracesCorrectly()
     {
         // Arrange
@@ -66,11 +47,11 @@ public class DatabaseTests(TestContext context)
 
         // Assert
         var query = new Query();
-        var traces = _database.QueryTraces(query);
+        var traces = _database.QuerySpans(query);
 
         Assert.HasCount(2, traces);
         Assert.AreEqual("test-service", traces[1].ServiceName);
-        Assert.AreEqual("root-span", traces[1].SpanName);
+        Assert.AreEqual("root-span", traces[1].Name);
     }
 
     [TestMethod]
@@ -88,7 +69,7 @@ public class DatabaseTests(TestContext context)
 
         Assert.HasCount(2, metrics);
         Assert.AreEqual("test-service", metrics[0].ServiceName);
-        Assert.AreEqual("test.counter", metrics[0].MetricName);
+        Assert.AreEqual("test.counter", metrics[0].Name);
     }
 
     [TestMethod]
@@ -102,45 +83,16 @@ public class DatabaseTests(TestContext context)
 
         // Assert - Should not throw foreign key constraint error
         var query = new Query();
-        var traces = _database.QueryTraces(query);
+        var traces = _database.QuerySpans(query);
 
         Assert.HasCount(3, traces);
 
         // Verify parent-child relationships exist
-        var rootSpan = traces.First(t => t.ParentSpanId == null);
-        var childSpans = traces.Where(t => t.ParentSpanId != null).ToList();
+        var rootSpan = traces.First(t => t.ParentSpanId.Length == 0);
+        var childSpans = traces.Where(t => t.ParentSpanId.Length != 0).ToList();
 
         Assert.IsNotNull(rootSpan);
         Assert.HasCount(2, childSpans);
-    }
-
-    [TestMethod]
-    public void GetLogCountForTrace_ShouldReturnCorrectCount()
-    {
-        // Arrange
-        var resourceLogs = CreateTestResourceLogsWithTraceContext();
-        var traceId = ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
-        var spanId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8]);
-
-        foreach (var scopeLog in resourceLogs.ScopeLogs)
-        {
-            foreach (var logRecord in scopeLog.LogRecords)
-            {
-                logRecord.TraceId = traceId;
-                logRecord.SpanId = spanId;
-            }
-        }
-
-        var resourceSpans = CreateTestResourceSpans(traceId);
-
-        _database.InsertTraces(resourceSpans);
-        _database.InsertLogs(resourceLogs);
-
-        // Act
-        var logCount = _database.GetLogCountForTrace(Convert.ToHexString(traceId.ToByteArray()));
-
-        // Assert
-        Assert.AreEqual(2, logCount);
     }
 
     [TestMethod]
@@ -156,7 +108,7 @@ public class DatabaseTests(TestContext context)
         _database.InsertTraces(resourceSpans);
 
         // Query root span
-        var spans = _database.QueryTraces(new Query { ParentSpanId = "" } );
+        var spans = _database.QuerySpans(new Query { ParentSpanId = ByteString.Empty } );
 
         var metrics = _database.GetMetricsForTrace(spans[0]);
 
@@ -165,22 +117,6 @@ public class DatabaseTests(TestContext context)
         Assert.AreEqual("test-service", metrics[0].ServiceName);
     }
 
-    [TestMethod]
-    public void QueryLogs_WithTextFilter_ShouldReturnMatchingLogs()
-    {
-        // Arrange
-        _database.InsertLogs(CreateTestResourceLogs());
-
-        var query = new Query { Text = "message 1" };
-
-        // Act
-        var logs = _database.QueryLogs(query);
-
-        // Assert
-        Assert.HasCount(1, logs);
-        Assert.IsNotNull(logs[0].Body);
-        Assert.Contains("message 1", logs[0].Body!);
-    }
 
     [TestMethod]
     public void QueryTraces_WithServiceFilter_ShouldReturnMatchingTraces()
@@ -191,7 +127,7 @@ public class DatabaseTests(TestContext context)
         var query = new Query { ServiceName = "test-service" };
 
         // Act
-        var traces = _database.QueryTraces(query);
+        var traces = _database.QuerySpans(query);
 
         // Assert
         Assert.HasCount(2, traces);

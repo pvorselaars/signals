@@ -46,24 +46,9 @@
         @foreach (var metric in db.QueryMetrics(query))
         {
             <tr>
-                <td>@metric.MetricName</td>
+                <td>@metric.Name</td>
                 <td>@metric.Description</td>
-                <td>@metric.MetricType</td>
-                @if (metric.ValueDouble.HasValue)
-                {
-                    <td>@metric.ValueDouble.Value.ToString()</td>
-                }
-                else if (metric.ValueInt.HasValue)
-                {
-                    <td>@metric.ValueInt.Value.ToString()</td>
-                }
-                else
-                {
-                    <td>N/A</td>
-                }
-                <td>@(metric.SumValue.HasValue? metric.SumValue.Value.ToString() : "N/A")</td>
-                <td>@(metric.MaxValue.HasValue? metric.MaxValue.Value.ToString() : "N/A")</td>
-                <td>@(metric.MinValue.HasValue? metric.MinValue.Value.ToString() : "N/A")</td>
+                <td>@metric.Type</td>
             </tr>
         }
     </tbody>
