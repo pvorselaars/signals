@@ -1,12 +1,12 @@
 ﻿@page "/traces"
 @using Google.Protobuf
-@using Signals.Repository
 @rendermode RenderMode.InteractiveServer
 @implements IDisposable
-@using static Signals.Repository.Database
+@using Signals.Telemetry
+@using static Signals.Telemetry.Repository
 @using System.Linq
 
-@inject Database db
+@inject Repository repo
 
 <PageTitle>Traces</PageTitle>
 
@@ -14,14 +14,14 @@
     <input type="search" placeholder="Search traces..." @bind="query.Text" @bind:event="oninput" />
     <select id="scope" title="Scope" @bind="query.ScopeName">
         <option value="">Any scope</option>
-        @foreach (var scope in db.GetUniqueTraceScopes())
+        @foreach (var scope in repo.GetUniqueTraceScopes())
         {
             <option value="@scope">@scope</option>
         }
     </select>
     <select id="resource" title="Resource" @bind="query.ServiceName">
         <option value="">Any service</option>
-        @foreach (var service in db.GetUniqueServices())
+        @foreach (var service in repo.GetUniqueServices())
         {
             <option value="@service">@service
             </option>
@@ -41,7 +41,7 @@
         </tr>
     </thead>
     <tbody>
-        @foreach (var span in db.QuerySpans(query))
+        @foreach (var span in repo.QuerySpans(query))
         {
             <tr @onclick="() => SelectSpan(span.SpanId)" style="cursor: pointer;"
                 class="@(_selectedSpanId == span.SpanId ? "active" : "")">
@@ -53,24 +53,24 @@
 
             @if (_selectedSpanId == span.SpanId)
             {
-                var logCount = db.GetLogCountForTrace(span.TraceId);
-                var metrics = db.GetMetricsForTrace(span);
+                var logCount = repo.GetLogCountForTrace(span.TraceId);
+                var metrics = repo.GetMetricsForTrace(span);
                 <tr>
                     <td colspan="4">
                         <strong>Logs: @logCount</strong>
                         @if (metrics.Any())
                         {
                             <br>
-                            <strong>Correlated Metrics: (@metrics.Count)</strong>
+                            <strong>Correlated Metrics: (@metrics.Count())</strong>
                             <table style="margin: 10px 0;">
                                 <tr><th>Name</th><th>Type</th><th>Value</th><th>Time</th></tr>
                                 @foreach (var metric in metrics.Take(10))
                                 {
                                     <tr>
-                                        <td>@metric.MetricName</td>
-                                        <td>@metric.MetricType</td>  
-                                        <td>@(metric.ValueDouble?.ToString("F3") ?? metric.ValueInt?.ToString() ?? metric.Count?.ToString() ?? "N/A")</td>
-                                        <td>@DateTimeOffset.FromUnixTimeMilliseconds(metric.TimeUnixNano / 1_000_000).ToLocalTime().ToString("HH:mm:ss.fff")</td>
+                                        <td>@metric.Name</td>
+                                        <td>@metric.Type</td>  
+                                        <td></td>
+                                        <td></td>
                                     </tr>
                                 }
                             </table>

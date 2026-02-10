@@ -4,32 +4,26 @@ using OpenTelemetry.Proto.Metrics.V1;
 using OpenTelemetry.Proto.Resource.V1;
 using OpenTelemetry.Proto.Common.V1;
 using Google.Protobuf;
-using Signals.Repository;
-using static Signals.Repository.Database;
+using Signals.Telemetry;
+using static Signals.Telemetry.Repository;
 
 namespace Tests;
 
 [TestClass]
 public class IntegrationTests(TestContext testContext)
 {
-    private Database _database = null!;
-    private string _testDbPath = null!;
+    private Repository _repository = null!;
 
     public TestContext TestContext { get; set; } = testContext;
 
     [TestInitialize]
     public void Setup()
     {
-        // Create a unique test database for each test
-        _testDbPath = $"TestData_{TestContext.TestName}.db";
-        if (File.Exists(_testDbPath))
-            File.Delete(_testDbPath);
-
-        _database = new Database($"Data Source={_testDbPath};");
+        _repository = new Repository(":memory:"); // Use in-memory database for testing
     }
 
     [TestCleanup]
-    public void Cleanup() => _database?.Dispose();
+    public void Cleanup() => _repository?.Dispose();
 
     [TestMethod]
     public void FullWorkflow_InsertAndQueryAllTelemetryTypes_ShouldWorkCorrectly()
@@ -51,14 +45,14 @@ public class IntegrationTests(TestContext testContext)
         var metrics = CreateIntegratedMetrics(baseTime);
 
         // Act - Insert all telemetry data
-        _database.InsertTraces(traces);
-        _database.InsertLogs(logs);
-        _database.InsertMetrics(metrics);
+        _repository.InsertTraces(traces);
+        _repository.InsertLogs(logs);
+        _repository.InsertMetrics(metrics);
 
         // Assert - Verify data integrity and correlations
 
         // 1. Verify traces are inserted with proper hierarchy
-        var allTraces = _database.QuerySpans(new Query());
+        var allTraces = _repository.QuerySpans(new Query());
         Assert.HasCount(2, allTraces);
 
         var rootSpan = allTraces.FirstOrDefault(t => t.ParentSpanId == ByteString.Empty);
@@ -70,29 +64,29 @@ public class IntegrationTests(TestContext testContext)
         Assert.AreEqual("database-query", childSpan.Name);
 
         // 2. Verify logs are correlated to spans
-        var logCount = _database.GetLogCountForSpan(rootSpan.SpanId);
+        var logCount = _repository.GetLogCountForSpan(rootSpan.SpanId);
         Assert.AreEqual(2, logCount); // Should have 2 logs for root span
 
-        var childLogCount = _database.GetLogCountForSpan(childSpan.SpanId);
+        var childLogCount = _repository.GetLogCountForSpan(childSpan.SpanId);
         Assert.AreEqual(1, childLogCount); // Should have 1 log for child span
 
         // 3. Verify logs can be queried independently
-        var allLogs = _database.QueryLogs(new Query());
+        var allLogs = _repository.QueryLogs(new Query());
         Assert.HasCount(3, allLogs);
 
-        var errorLogs = _database.QueryLogs(new Query { MinSeverity = 17 }); // ERROR level
+        var errorLogs = _repository.QueryLogs(new Query { MinSeverity = 17 }); // ERROR level
         Assert.HasCount(1, errorLogs);
 
         // 4. Verify metrics correlation with spans
-        var correlatedMetrics = _database.GetMetricsForTrace(rootSpan);
+        var correlatedMetrics = _repository.GetMetricsForTrace(rootSpan);
         Assert.IsNotEmpty(correlatedMetrics);
         Assert.IsTrue(correlatedMetrics.All(m => m.ServiceName == "integration-test-service"));
 
         // 5. Verify complex queries work
         var serviceQuery = new Query { ServiceName = "integration-test-service" };
-        var serviceTraces = _database.QuerySpans(serviceQuery);
-        var serviceLogs = _database.QueryLogs(serviceQuery);
-        var serviceMetrics = _database.QueryMetrics(serviceQuery);
+        var serviceTraces = _repository.QuerySpans(serviceQuery);
+        var serviceLogs = _repository.QueryLogs(serviceQuery);
+        var serviceMetrics = _repository.QueryMetrics(serviceQuery);
 
         Assert.HasCount(2, serviceTraces);
         Assert.HasCount(3, serviceLogs);
@@ -105,9 +99,9 @@ public class IntegrationTests(TestContext testContext)
             EndTime = DateTimeOffset.FromUnixTimeMilliseconds((long)baseTime / 1_000_000).AddSeconds(10)
         };
 
-        var timeFilteredTraces = _database.QuerySpans(timeQuery);
-        var timeFilteredLogs = _database.QueryLogs(timeQuery);
-        var timeFilteredMetrics = _database.QueryMetrics(timeQuery);
+        var timeFilteredTraces = _repository.QuerySpans(timeQuery);
+        var timeFilteredLogs = _repository.QueryLogs(timeQuery);
+        var timeFilteredMetrics = _repository.QueryMetrics(timeQuery);
 
         Assert.HasCount(2, timeFilteredTraces);
         Assert.HasCount(3, timeFilteredLogs);
@@ -125,20 +119,20 @@ public class IntegrationTests(TestContext testContext)
         var service2Logs = CreateServiceLogs("service-2", "v2.0.0");
 
         // Act
-        _database.InsertTraces(service1Traces);
-        _database.InsertTraces(service2Traces);
-        _database.InsertLogs(service1Logs);
-        _database.InsertLogs(service2Logs);
+        _repository.InsertTraces(service1Traces);
+        _repository.InsertTraces(service2Traces);
+        _repository.InsertLogs(service1Logs);
+        _repository.InsertLogs(service2Logs);
 
         // Assert - Verify data isolation
         var service1Query = new Query { ServiceName = "service-1" };
         var service2Query = new Query { ServiceName = "service-2" };
 
-        var service1TracesResult = _database.QuerySpans(service1Query);
-        var service2TracesResult = _database.QuerySpans(service2Query);
+        var service1TracesResult = _repository.QuerySpans(service1Query);
+        var service2TracesResult = _repository.QuerySpans(service2Query);
 
-        var service1LogsResult = _database.QueryLogs(service1Query);
-        var service2LogsResult = _database.QueryLogs(service2Query);
+        var service1LogsResult = _repository.QueryLogs(service1Query);
+        var service2LogsResult = _repository.QueryLogs(service2Query);
 
         Assert.HasCount(1, service1TracesResult);
         Assert.HasCount(1, service2TracesResult);
@@ -151,7 +145,7 @@ public class IntegrationTests(TestContext testContext)
 
     // Helper methods for creating integrated test data
 
-    private static ResourceSpans CreateIntegratedTraces(ByteString traceId, ByteString rootSpanId, ByteString childSpanId, ulong baseTime)
+    private static IEnumerable<ResourceSpans> CreateIntegratedTraces(ByteString traceId, ByteString rootSpanId, ByteString childSpanId, ulong baseTime)
     {
         var resource = CreateTestResource("integration-test-service", "1.0.0");
         var scopeSpans = new ScopeSpans
@@ -184,10 +178,10 @@ public class IntegrationTests(TestContext testContext)
 
         var resourceSpans = new ResourceSpans { Resource = resource };
         resourceSpans.ScopeSpans.Add(scopeSpans);
-        return resourceSpans;
+        return [resourceSpans];
     }
 
-    private static ResourceLogs CreateIntegratedLogs(ByteString traceId, ByteString rootSpanId, ByteString childSpanId, ulong baseTime)
+    private static IEnumerable<ResourceLogs> CreateIntegratedLogs(ByteString traceId, ByteString rootSpanId, ByteString childSpanId, ulong baseTime)
     {
         var resource = CreateTestResource("integration-test-service", "1.0.0");
         var scopeLogs = new ScopeLogs
@@ -230,7 +224,7 @@ public class IntegrationTests(TestContext testContext)
 
         var resourceLogs = new ResourceLogs { Resource = resource };
         resourceLogs.ScopeLogs.Add(scopeLogs);
-        return resourceLogs;
+        return [resourceLogs];
     }
 
     private static ResourceMetrics CreateIntegratedMetrics(ulong baseTime)
@@ -279,7 +273,7 @@ public class IntegrationTests(TestContext testContext)
         return resourceMetrics;
     }
 
-    private static ResourceSpans CreateServiceTraces(string serviceName, string version)
+    private static IEnumerable<ResourceSpans> CreateServiceTraces(string serviceName, string version)
     {
         var resource = CreateTestResource(serviceName, version);
         var scopeSpans = new ScopeSpans
@@ -303,10 +297,10 @@ public class IntegrationTests(TestContext testContext)
 
         var resourceSpans = new ResourceSpans { Resource = resource };
         resourceSpans.ScopeSpans.Add(scopeSpans);
-        return resourceSpans;
+        return [resourceSpans];
     }
 
-    private static ResourceLogs CreateServiceLogs(string serviceName, string version)
+    private static IEnumerable<ResourceLogs> CreateServiceLogs(string serviceName, string version)
     {
         var resource = CreateTestResource(serviceName, version);
         var scopeLogs = new ScopeLogs
@@ -326,7 +320,7 @@ public class IntegrationTests(TestContext testContext)
 
         var resourceLogs = new ResourceLogs { Resource = resource };
         resourceLogs.ScopeLogs.Add(scopeLogs);
-        return resourceLogs;
+        return [resourceLogs];
     }
 
     private static Resource CreateTestResource(string serviceName, string version)

@@ -6,10 +6,12 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Logs;
 using System.Reflection;
-using Signals.Receivers;
 using OpenTelemetry;
 using System.Diagnostics;
-using Signals.Repository;
+using Signals.Telemetry;
+using Signals.Telemetry.Traces;
+using Signals.Telemetry.Metrics;
+using Signals.Telemetry.Logs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,10 +30,10 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 
-builder.Services.AddSingleton<Database>();
-builder.Services.AddKeyedScoped<Database.Query>("traces");
-builder.Services.AddKeyedScoped<Database.Query>("logs");
-builder.Services.AddKeyedScoped<Database.Query>("metrics");
+builder.Services.AddSingleton<Repository>();
+builder.Services.AddKeyedScoped<Repository.Query>("traces");
+builder.Services.AddKeyedScoped<Repository.Query>("logs");
+builder.Services.AddKeyedScoped<Repository.Query>("metrics");
 builder.Services.AddGrpc();
 
 builder.Services.AddRazorComponents()

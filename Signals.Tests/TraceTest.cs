@@ -2,49 +2,41 @@ using Google.Protobuf;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Resource.V1;
 using OpenTelemetry.Proto.Trace.V1;
-using Signals.Repository;
-using static Signals.Repository.Database;
+using Signals.Telemetry;
+using static Signals.Telemetry.Repository;
 
 namespace Tests;
 
 [TestClass]
 public class TraceTests(TestContext context)
 {
-    private Database _database = null!;
-    private string _testDbPath = null!;
+    private Repository _repository = null!;
 
     public TestContext TestContext { get; set; } = context;
 
     [TestInitialize]
-    public void Setup()
-    {
-        _testDbPath = $"TestData_{TestContext.TestName}.db";
-        if (File.Exists(_testDbPath))
-            File.Delete(_testDbPath);
-
-        _database = new Database($"Data Source={_testDbPath}");
-    }
+    public void Setup() => _repository = new Repository(":memory:");
 
     [TestCleanup]
-    public void Cleanup()
-    {
-        _database?.Dispose();
-    }
+    public void Cleanup() => _repository.Dispose();
 
     [TestMethod]
     public void InsertTraces_ShouldStoreTracesCorrectly()
     {
         // Arrange
-        _database.InsertTraces(CreateTestResourceTraces());
+        _repository.InsertTraces(CreateTestResourceTraces());
 
         // Act
-        var query = new Query();
-        var traces = _database.QuerySpans(query);
+        var query = new Query()
+        {
+            ParentSpanId = ByteString.Empty // Only query root spans
+        };
+        var traces = _repository.QuerySpans(query);
 
         // Assert
         Assert.HasCount(1, traces);
-        Assert.AreEqual("test-service", traces[0].ServiceName);
-        Assert.AreEqual("test-scope", traces[0].ScopeName);
+        Assert.AreEqual("test-service", traces[0].Attributes.FirstOrDefault(attr => attr.Key == "service.name")?.Value.StringValue);
+        Assert.AreEqual("test-scope", traces[0].Attributes.FirstOrDefault(attr => attr.Key == "scope.name")?.Value.StringValue);
         Assert.AreEqual("Root", traces[0].Name);
     }
 
@@ -52,20 +44,21 @@ public class TraceTests(TestContext context)
     public void QueryTraces_WithSpanNameFilter_ShouldReturnMatchingTraces()
     {
         // Arrange
-        _database.InsertTraces(CreateTestResourceTraces());
+        _repository.InsertTraces(CreateTestResourceTraces());
 
         // Act
         var query = new Query { SpanName = "Child 1" };
-        var traces = _database.QuerySpans(query);
+        var traces = _repository.QuerySpans(query);
 
         // Assert
         Assert.HasCount(1, traces);
         Assert.AreEqual("Child 1", traces[0].Name);
     }
 
-    private static ResourceSpans CreateTestResourceTraces()
+    private static IEnumerable<ResourceSpans> CreateTestResourceTraces()
     {
-        return new ResourceSpans
+        var time = DateTimeOffset.UtcNow.AddMinutes(-15).ToUnixTimeSeconds();
+        return [new ResourceSpans
         {
             Resource = new Resource { 
                 Attributes = { 
@@ -82,8 +75,8 @@ public class TraceTests(TestContext context)
                             TraceId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
                             SpanId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8]),
                             Name = "Root",
-                            StartTimeUnixNano = (ulong)DateTimeOffset.UtcNow.ToUnixTimeSeconds() * 1_000_000_000,
-                            EndTimeUnixNano = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 5) * 1_000_000_000
+                            StartTimeUnixNano = (ulong)time * 1_000_000_000L,
+                            EndTimeUnixNano = (ulong) (time + 5 * 1_000_000_000L) // 5 seconds later
                         },
                         new Span
                         {
@@ -91,8 +84,8 @@ public class TraceTests(TestContext context)
                             SpanId = ByteString.CopyFrom([8, 7, 6, 5, 4, 3, 2, 1]),
                             ParentSpanId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8]),
                             Name = "Child 1",
-                            StartTimeUnixNano = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 2) * 1_000_000_000,
-                            EndTimeUnixNano = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 3) * 1_000_000_000
+                            StartTimeUnixNano = (ulong)(time + 2) * 1_000_000_000,
+                            EndTimeUnixNano = (ulong)(time + 3) * 1_000_000_000
                         },
                         new Span
                         {
@@ -100,13 +93,13 @@ public class TraceTests(TestContext context)
                             SpanId = ByteString.CopyFrom([2, 3, 4, 5, 6, 7, 8, 9]),
                             ParentSpanId = ByteString.CopyFrom([1, 2, 3, 4, 5, 6, 7, 8]),
                             Name = "Child 2",
-                            StartTimeUnixNano = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 4) * 1_000_000_000,
-                            EndTimeUnixNano = (ulong)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 5) * 1_000_000_000
+                            StartTimeUnixNano = (ulong)(time + 4) * 1_000_000_000,
+                            EndTimeUnixNano = (ulong)(time + 5) * 1_000_000_000
                         }
                     }
                 }
             }
-        };
+        }];
     }
 
 }

@@ -1,0 +1,71 @@
+@page "/logs"
+@implements IDisposable
+@using static Signals.Telemetry.Repository
+@using Microsoft.AspNetCore.Components.Web
+@rendermode RenderMode.InteractiveServer
+
+@inject Repository repo
+
+<PageTitle>Logs</PageTitle>
+
+<fieldset>
+    <input type="search" placeholder="Search logs..." @bind="query.Text" @bind:event="oninput" />
+    <select id="scope" title="Scope" @bind="query.ScopeName">
+        <option value="">Any scope</option>
+        @foreach (var scope in repo.GetUniqueLogScopes())
+        {
+            <option value="@scope">@scope</option>
+        }
+    </select>
+    <select id="resource" title="Resource" @bind="query.ServiceName">
+        <option value="">Any service</option>
+        @foreach (var service in repo.GetUniqueServices())
+        {
+            <option value="@service">@service
+            </option>
+        }
+
+    </select>
+    <input type="datetime-local" title="Start Time" @bind="query.StartTime" />
+    <input type="datetime-local" title="End Time" @bind="query.EndTime" />
+</fieldset>
+<table>
+    <thead>
+        <tr>
+            <th>Resource</th>
+            <th>Scope</th>
+            <th>Severity</th>
+            <th>Log</th>
+            <th>Timestamp</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var log in repo.QueryLogs(query))
+        {
+            <tr>
+                <td>@log.Attributes.FirstOrDefault(a => a.Key == "service.name")!.Value.StringValue</td>
+                <td>@log.Attributes.FirstOrDefault(a => a.Key == "scope.name")!.Value.StringValue</td>
+                <td>@log.SeverityText</td>
+                <td>@log.Body.StringValue</td>
+                <td>@log.GetFormattedTime()</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+
+    [Inject(Key = "logs")]
+    private Query query { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+
+}

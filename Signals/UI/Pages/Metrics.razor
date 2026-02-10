@@ -2,10 +2,10 @@
 @rendermode RenderMode.InteractiveServer
 @implements IDisposable
 @using OpenTelemetry.Metrics
-@using Signals.Repository
-@using static Signals.Repository.Database
+@using Signals.Telemetry
+@using static Signals.Telemetry.Repository
 
-@inject Database db
+@inject Repository repo
 
 <PageTitle>Metrics</PageTitle>
 
@@ -13,14 +13,14 @@
     <input type="search" placeholder="Search metrics..." @bind="query.Text" @bind:event="oninput" />
     <select id="scope" title="Scope" @bind="query.ScopeName">
         <option value="">Any scope</option>
-        @foreach (var scope in db.GetUniqueMetricScopes())
+        @foreach (var scope in repo.GetUniqueMetricScopes())
         {
             <option value="@scope">@scope</option>
         }
     </select>
     <select id="resource" title="Resource" @bind="query.ServiceName">
         <option value="">Any service</option>
-        @foreach (var service in db.GetUniqueServices())
+        @foreach (var service in repo.GetUniqueServices())
         {
             <option value="@service">@service
             </option>
@@ -43,7 +43,7 @@
         </tr>
     </thead>
     <tbody>
-        @foreach (var metric in db.QueryMetrics(query))
+        @foreach (var metric in repo.QueryMetrics(query))
         {
             <tr>
                 <td>@metric.Name</td>

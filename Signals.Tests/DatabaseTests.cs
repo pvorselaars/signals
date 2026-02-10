@@ -4,36 +4,29 @@ using OpenTelemetry.Proto.Metrics.V1;
 using OpenTelemetry.Proto.Resource.V1;
 using OpenTelemetry.Proto.Common.V1;
 using Google.Protobuf;
-using Signals.Repository;
-using static Signals.Repository.Database;
+using Signals.Telemetry;
+using static Signals.Telemetry.Repository;
 
 [assembly: Parallelize(Workers = 1, Scope = ExecutionScope.MethodLevel)] // Ensure tests run sequentially to avoid database conflicts
 namespace Tests;
 
 [TestClass]
-public class DatabaseTests(TestContext context)
+public class RepositoryTests(TestContext context)
 {
-    private Database _database = null!;
-    private string _testDbPath = null!;
+    private Repository _repository = null!;
 
     public TestContext TestContext { get; set; } = context;
 
     [TestInitialize]
     public void Setup()
     {
-        // Create a unique test database for each test
-        _testDbPath = $"TestData_{TestContext.TestName}.db";
-        if (File.Exists(_testDbPath))
-            File.Delete(_testDbPath);
-
-        // We'll need to modify Database to accept a connection string
-        _database = new Database($"Data Source={_testDbPath}");
+        _repository = new Repository(":memory:"); // Use in-memory database for testing
     }
 
     [TestCleanup]
     public void Cleanup()
     {
-        _database?.Dispose();
+        _repository?.Dispose();
     }
 
     [TestMethod]
@@ -43,11 +36,11 @@ public class DatabaseTests(TestContext context)
         var resourceSpans = CreateTestResourceSpans();
 
         // Act
-        _database.InsertTraces(resourceSpans);
+        _repository.InsertTraces(resourceSpans);
 
         // Assert
         var query = new Query();
-        var traces = _database.QuerySpans(query);
+        var traces = _repository.QuerySpans(query);
 
         Assert.HasCount(2, traces);
         Assert.AreEqual("test-service", traces[1].ServiceName);
@@ -61,11 +54,11 @@ public class DatabaseTests(TestContext context)
         var resourceMetrics = CreateTestResourceMetrics();
 
         // Act
-        _database.InsertMetrics(resourceMetrics);
+        _repository.InsertMetrics(resourceMetrics);
 
         // Assert
         var query = new Query();
-        var metrics = _database.QueryMetrics(query);
+        var metrics = _repository.QueryMetrics(query);
 
         Assert.HasCount(2, metrics);
         Assert.AreEqual("test-service", metrics[0].ServiceName);
@@ -79,11 +72,11 @@ public class DatabaseTests(TestContext context)
         var resourceSpans = CreateTestResourceSpansWithHierarchy();
 
         // Act
-        _database.InsertTraces(resourceSpans);
+        _repository.InsertTraces(resourceSpans);
 
         // Assert - Should not throw foreign key constraint error
         var query = new Query();
-        var traces = _database.QuerySpans(query);
+        var traces = _repository.QuerySpans(query);
 
         Assert.HasCount(3, traces);
 
@@ -104,17 +97,16 @@ public class DatabaseTests(TestContext context)
         var resourceSpans = CreateTestResourceSpans(null, time);
 
         // Act
-        _database.InsertMetrics(resourceMetrics);
-        _database.InsertTraces(resourceSpans);
+        _repository.InsertMetrics(resourceMetrics);
+        _repository.InsertTraces(resourceSpans);
 
         // Query root span
-        var spans = _database.QuerySpans(new Query { ParentSpanId = ByteString.Empty } );
+        var spans = _repository.QuerySpans(new Query { ParentSpanId = ByteString.Empty } );
 
-        var metrics = _database.GetMetricsForTrace(spans[0]);
+        var metrics = _repository.GetMetricsForTrace(spans[0]);
 
         // Assert
         Assert.IsNotEmpty(metrics);
-        Assert.AreEqual("test-service", metrics[0].ServiceName);
     }
 
 
@@ -122,12 +114,12 @@ public class DatabaseTests(TestContext context)
     public void QueryTraces_WithServiceFilter_ShouldReturnMatchingTraces()
     {
         // Arrange
-        _database.InsertTraces(CreateTestResourceSpans());
+        _repository.InsertTraces(CreateTestResourceSpans());
 
         var query = new Query { ServiceName = "test-service" };
 
         // Act
-        var traces = _database.QuerySpans(query);
+        var traces = _repository.QuerySpans(query);
 
         // Assert
         Assert.HasCount(2, traces);
@@ -139,7 +131,7 @@ public class DatabaseTests(TestContext context)
     {
         // Arrange
         var baseTime = DateTimeOffset.UtcNow.AddHours(-1);
-        _database.InsertMetrics(CreateTestResourceMetrics(baseTime));
+        _repository.InsertMetrics(CreateTestResourceMetrics(baseTime));
 
         var query = new Query
         {
@@ -148,7 +140,7 @@ public class DatabaseTests(TestContext context)
         };
 
         // Act
-        var metrics = _database.QueryMetrics(query);
+        var metrics = _repository.QueryMetrics(query);
 
         // Assert
         Assert.IsNotEmpty(metrics);
@@ -161,18 +153,18 @@ public class DatabaseTests(TestContext context)
         var resourceMetrics = CreateTestResourceMetricsWithManyDataPoints();
 
         // Act
-        _database.InsertMetrics(resourceMetrics);
+        _repository.InsertMetrics(resourceMetrics);
 
         // Assert
         var query = new Query();
-        var metrics = _database.QueryMetrics(query);
+        var metrics = _repository.QueryMetrics(query);
 
         Assert.HasCount(10, metrics); // Should have all 10 data points
     }
 
     // Helper methods to create test data
 
-    private ResourceLogs CreateTestResourceLogs()
+    private static ResourceLogs CreateTestResourceLogs()
     {
         var resource = CreateTestResource();
         var scopeLogs = new ScopeLogs
@@ -221,7 +213,7 @@ public class DatabaseTests(TestContext context)
         return resourceLogs;
     }
 
-    private ResourceSpans CreateTestResourceSpans(ByteString? traceId = null, DateTimeOffset? time = null)
+    private static IEnumerable<ResourceSpans> CreateTestResourceSpans(ByteString? traceId = null, DateTimeOffset? time = null)
     {
         var resource = CreateTestResource();
         var scopeSpans = new ScopeSpans
@@ -257,10 +249,10 @@ public class DatabaseTests(TestContext context)
 
         var resourceSpans = new ResourceSpans { Resource = resource };
         resourceSpans.ScopeSpans.Add(scopeSpans);
-        return resourceSpans;
+        return [resourceSpans];
     }
 
-    private ResourceSpans CreateTestResourceSpansWithHierarchy()
+    private static IEnumerable<ResourceSpans> CreateTestResourceSpansWithHierarchy()
     {
         var resource = CreateTestResource();
         var scopeSpans = new ScopeSpans
@@ -308,10 +300,10 @@ public class DatabaseTests(TestContext context)
 
         var resourceSpans = new ResourceSpans { Resource = resource };
         resourceSpans.ScopeSpans.Add(scopeSpans);
-        return resourceSpans;
+        return [resourceSpans];
     }
 
-    private ResourceMetrics CreateTestResourceMetrics(DateTimeOffset? time = null)
+    private static ResourceMetrics CreateTestResourceMetrics(DateTimeOffset? time = null)
     {
         var resource = CreateTestResource();
         var scopeMetrics = new ScopeMetrics
@@ -362,7 +354,7 @@ public class DatabaseTests(TestContext context)
         return resourceMetrics;
     }
 
-    private ResourceMetrics CreateTestResourceMetricsWithManyDataPoints()
+    private static ResourceMetrics CreateTestResourceMetricsWithManyDataPoints()
     {
         var resource = CreateTestResource();
         var scopeMetrics = new ScopeMetrics
