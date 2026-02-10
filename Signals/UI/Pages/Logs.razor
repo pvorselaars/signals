@@ -42,13 +42,19 @@
     <tbody>
         @foreach (var log in db.QueryLogs(query))
         {
-            <tr>
-                <td>@log.ServiceName</td>
-                <td>@log.ScopeName</td>
-                <td>@log.SeverityText</td>
-                <td>@log.Body</td>
-                <td>@log.GetTime()</td>
-            </tr>
+            var serviceName = log.Resource.Attributes.FirstOrDefault(a => a.Key == "service.name")?.Value.StringValue;
+            @foreach (var scopeLog in log.ScopeLogs)
+            {
+                @foreach (var logRecord in scopeLog.LogRecords)
+                {
+                    <tr>
+                        <td>@serviceName</td>
+                        <td>@scopeLog.Scope.Name</td>
+                        <td>@logRecord.SeverityText</td>
+                        <td>@logRecord.Body.StringValue</td>
+                    </tr>
+                }
+            }
         }
     </tbody>
 </table>

@@ -1,9 +1,7 @@
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
-using OpenTelemetry.Proto.Logs.V1;
-using OpenTelemetry.Proto.Trace.V1;
-using OpenTelemetry.Proto.Metrics.V1;
 using OpenTelemetry.Proto.Resource.V1;
+using Google.Protobuf;
 
 namespace Signals.Repository;
 
@@ -36,15 +34,20 @@ public sealed partial class Database : IDisposable
                 service_name TEXT NOT NULL,
                 service_version TEXT,
                 service_instance_id TEXT,
-                attributes_json TEXT
+                json TEXT
+            );
+            CREATE TABLE IF NOT EXISTS scopes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_name TEXT NOT NULL,
+                scope_version TEXT
             );
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 -- Core identifiers for filtering
                 resource_id INTEGER,
-                scope_name TEXT NOT NULL,
-                trace_id TEXT,
-                span_id TEXT,
+                scope_id INTEGER NOT NULL,
+                trace_id BLOB,
+                span_id BLOB,
                 -- Timestamp for range queries (indexed)
                 time_unix_nano INTEGER NOT NULL,
                 observed_time_unix_nano INTEGER,
@@ -52,31 +55,29 @@ public sealed partial class Database : IDisposable
                 severity_number INTEGER,
                 severity_text TEXT,
                 body TEXT,
-                FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
+                FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+                FOREIGN KEY(scope_id) REFERENCES scopes(id) ON DELETE CASCADE
             );
-            CREATE TABLE IF NOT EXISTS traces (
+            CREATE TABLE IF NOT EXISTS spans (
                 -- Core identifiers
                 resource_id INTEGER,
-                scope_name TEXT NOT NULL,
+                scope_id INTEGER NOT NULL,
                 -- Trace identifiers
-                trace_id TEXT NOT NULL,
+                trace_id BLOB NOT NULL,
                 -- 16 bytes
-                span_id TEXT PRIMARY KEY,
+                span_id BLOB PRIMARY KEY,
                 -- 8 bytes
-                parent_span_id TEXT,
+                parent_span_id BLOB,
                 -- Timestamps
                 start_time_unix_nano INTEGER NOT NULL,
                 end_time_unix_nano INTEGER NOT NULL,
-                -- Span details
-                span_name TEXT NOT NULL,
-                span_kind INTEGER,
-                status_code INTEGER,
-                status_message TEXT,
-                FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE
+                name TEXT,
+                json TEXT,
+                FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+                FOREIGN KEY(scope_id) REFERENCES scopes(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS metrics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scope_name TEXT NOT NULL,
                 metric_name TEXT NOT NULL,
                 metric_type INTEGER NOT NULL,
                 metric_unit TEXT,
@@ -85,6 +86,7 @@ public sealed partial class Database : IDisposable
             CREATE TABLE IF NOT EXISTS data_points (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 resource_id INTEGER,
+                scope_id INTEGER NOT NULL,
                 metric_id INTEGER NOT NULL,
                 time_unix_nano INTEGER NOT NULL,
                 value_double REAL,
@@ -94,7 +96,8 @@ public sealed partial class Database : IDisposable
                 min_value REAL,
                 max_value REAL,
                 FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE,
-                FOREIGN KEY(metric_id) REFERENCES metrics(id) ON DELETE CASCADE
+                FOREIGN KEY(metric_id) REFERENCES metrics(id) ON DELETE CASCADE,
+                FOREIGN KEY(scope_id) REFERENCES scopes(id) ON DELETE CASCADE
             );
         ");
     }
@@ -128,108 +131,8 @@ public sealed partial class Database : IDisposable
         private string? _spanName;
         public string? SpanName { get => _spanName; set { if (_spanName != value) { _spanName = value; NotifyStateChanged(); } } }
 
-        private string? _partentSpanId;
-        public string? ParentSpanId { get => _partentSpanId; set { if (_partentSpanId != value) { _partentSpanId = value; NotifyStateChanged(); } } }
-    }
-
-    public List<string> GetUniqueServices()
-    {
-        var command = _connection.CreateCommand();
-        command.CommandText = "SELECT DISTINCT service_name FROM resources ORDER BY service_name";
-
-        var services = new List<string>();
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
-        {
-            services.Add(reader.GetString(0));
-        }
-
-        return services;
-    }
-
-    public List<string> GetUniqueScopes(string? serviceName = null)
-    {
-        var command = _connection.CreateCommand();
-
-        command.CommandText = "SELECT DISTINCT scope_name FROM logs ORDER BY scope_name";
-
-        var scopes = new List<string>();
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
-        {
-            scopes.Add(reader.GetString(0));
-        }
-
-        return scopes;
-    }
-
-    private static string? GetResourceAttribute(Resource resource, string key)
-    {
-        return resource?.Attributes
-            ?.FirstOrDefault(a => a.Key == key)
-            ?.Value?.StringValue;
-    }
-
-    private static string GetAnyValueString(OpenTelemetry.Proto.Common.V1.AnyValue value)
-    {
-        switch (value.ValueCase)
-        {
-            case OpenTelemetry.Proto.Common.V1.AnyValue.ValueOneofCase.StringValue:
-                return value.StringValue;
-            case OpenTelemetry.Proto.Common.V1.AnyValue.ValueOneofCase.BoolValue:
-                return value.BoolValue ? "true" : "false";
-            case OpenTelemetry.Proto.Common.V1.AnyValue.ValueOneofCase.IntValue:
-                return value.IntValue.ToString();
-            case OpenTelemetry.Proto.Common.V1.AnyValue.ValueOneofCase.DoubleValue:
-                return value.DoubleValue.ToString();
-            case OpenTelemetry.Proto.Common.V1.AnyValue.ValueOneofCase.ArrayValue:
-                return string.Join(", ", value.ArrayValue.Values.Select(GetAnyValueString));
-            default:
-                return value.ToString();
-        }
-    }
-
-    private long GetOrCreateResource(Resource resource)
-    {
-        var serviceName = GetResourceAttribute(resource, "service.name") ?? "unknown";
-        var serviceVersion = GetResourceAttribute(resource, "service.version");
-        var serviceInstanceId = GetResourceAttribute(resource, "service.instance.id");
-        var attributesJson = JsonSerializer.Serialize(resource?.Attributes);
-
-        using var command = _connection.CreateCommand();
-
-        // Try to find existing resource
-        command.CommandText = @"
-            SELECT id FROM resources 
-            WHERE service_name = @service_name 
-            AND (service_version = @service_version OR (service_version IS NULL AND @service_version IS NULL))
-            AND (service_instance_id = @service_instance_id OR (service_instance_id IS NULL AND @service_instance_id IS NULL))
-        ";
-
-        command.Parameters.AddWithValue("@service_name", serviceName);
-        command.Parameters.AddWithValue("@service_version", serviceVersion ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@service_instance_id", serviceInstanceId ?? (object)DBNull.Value);
-
-        var existingId = command.ExecuteScalar();
-        if (existingId != null)
-        {
-            return (long)existingId;
-        }
-
-        // Create new resource
-        command.CommandText = @"
-            INSERT INTO resources (service_name, service_version, service_instance_id, attributes_json)
-            VALUES (@service_name, @service_version, @service_instance_id, @attributes_json);
-            SELECT last_insert_rowid();
-        ";
-
-        command.Parameters.Clear();
-        command.Parameters.AddWithValue("@service_name", serviceName);
-        command.Parameters.AddWithValue("@service_version", serviceVersion ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@service_instance_id", serviceInstanceId ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@attributes_json", attributesJson);
-
-        return (long)command.ExecuteScalar()!;
+        private ByteString? _partentSpanId;
+        public ByteString? ParentSpanId { get => _partentSpanId; set { if (_partentSpanId != value) { _partentSpanId = value; NotifyStateChanged(); } } }
     }
 
     private void ExecuteNonQuery(string sql)
