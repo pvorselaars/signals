@@ -1,0 +1,112 @@
+﻿@page "/traces"
+@using Google.Protobuf
+@using Microsoft.AspNetCore.Components.Web
+@using Signals.Telemetry
+@rendermode RenderMode.InteractiveServer
+@implements IDisposable
+@using System.Linq
+@using static Signals.Telemetry.Repository
+
+@inject Repository repo
+
+<PageTitle>Traces</PageTitle>
+
+<fieldset>
+    <input type="search" placeholder="Search traces..." @bind="query.Text" @bind:event="oninput" />
+    <select id="scope" title="Scope" @bind="query.ScopeName">
+        <option value="">Any scope</option>
+        @foreach (var scope in repo.GetUniqueTraceScopes())
+        {
+            <option value="@scope">@scope</option>
+        }
+    </select>
+    <select id="resource" title="Resource" @bind="query.ServiceName">
+        <option value="">Any service</option>
+        @foreach (var service in repo.GetUniqueServices())
+        {
+            <option value="@service">@service
+            </option>
+        }
+
+    </select>
+    <input type="datetime-local" title="Start Time" @bind="query.StartTime" />
+    <input type="datetime-local" title="End Time" @bind="query.EndTime" />
+</fieldset>
+<table>
+    <thead>
+        <tr>
+            @if (string.IsNullOrEmpty(query.ServiceName))
+            {
+                <th>Service</th>
+            }
+            @if (string.IsNullOrEmpty(query.ScopeName))
+            {
+                <th>Scope</th>
+            }
+            <th>Name</th>
+            <th>Start time</th>
+            <th>Duration</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var span in repo.QuerySpans(query))
+        {
+            <tr @onclick="() => SelectSpan(span)" style="cursor: pointer;"
+                class="@(query.TraceId == span.TraceId ? "active" : "")">
+                @if (string.IsNullOrEmpty(query.ServiceName))
+                {
+                    <td>@span.ServiceName</td>
+                }
+                @if (string.IsNullOrEmpty(query.ScopeName))
+                {
+                    <td>@span.Scope.Name</td>
+                }
+                <td>@span.Name</td>
+                <td>@span.GetFormattedStartTime()</td>
+                <td>@span.GetFormattedDuration()</td>
+            </tr>
+
+        }
+
+    </tbody>
+</table>
+
+@code {
+
+    [Inject]
+    private Query query { get; set; } = null!;
+
+    private ByteString? _selectedSpanId;
+
+    private void SelectSpan(OpenTelemetry.Proto.Trace.V1.Span span)
+    {
+        if (query.TraceId == span.TraceId)
+        {
+            query.TraceId = null;
+            query.StartTime = DateTime.Now.AddHours(-1);
+            query.EndTime = DateTime.Now;
+        }
+        else
+        {
+            query.TraceId = span.TraceId;
+            var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var start = epoch.AddTicks((long)span.StartTimeUnixNano / 100 - 10000); // Subtract 10ms to ensure we include the span in the results
+            var end = epoch.AddTicks((long)span.EndTimeUnixNano / 100 + 10000); // Add 10ms to ensure we include the span in the results
+
+            query.StartTime = start.ToLocalTime();
+            query.EndTime = end.ToLocalTime();
+        }
+
+    }
+
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+
+}

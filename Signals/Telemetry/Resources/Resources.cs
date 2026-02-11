@@ -1,9 +1,9 @@
 using Google.Protobuf;
 using OpenTelemetry.Proto.Resource.V1;
 
-namespace Signals.Repository;
+namespace Signals.Telemetry;
 
-public sealed partial class Database : IDisposable
+public sealed partial class Repository : IDisposable
 {
     private static string? GetResourceAttribute(Resource resource, string key)
     {
