@@ -1,0 +1,96 @@
+@page "/metrics"
+@rendermode RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Components.Web
+@implements IDisposable
+@using OpenTelemetry.Metrics
+@using Signals.Telemetry.Metrics
+@using static Signals.Telemetry.Repository
+
+@inject Repository repo
+
+<PageTitle>Metrics</PageTitle>
+
+<fieldset>
+    <input type="search" placeholder="Search metrics..." @bind="query.Text" @bind:event="oninput" />
+    <select id="scope" title="Scope" @bind="query.ScopeName">
+        <option value="">Any scope</option>
+        @foreach (var scope in repo.GetUniqueScopes())
+        {
+            <option value="@scope.Name">@scope.Name</option>
+        }
+    </select>
+    <select id="resource" title="Resource" @bind="query.ServiceName">
+        <option value="">Any service</option>
+        @foreach (var service in repo.GetUniqueServices())
+        {
+            <option value="@service">@service
+            </option>
+        }
+
+    </select>
+    <input type="datetime-local" title="Start Time" @bind="query.StartTime" />
+    <input type="datetime-local" title="End Time" @bind="query.EndTime" />
+</fieldset>
+<table>
+    <thead>
+        <tr>
+            @if (string.IsNullOrEmpty(query.ServiceName))
+            {
+                <th>Service</th>
+            }
+            @if (string.IsNullOrEmpty(query.ScopeName))
+            {
+                <th>Scope</th>
+            }
+            <th>Name</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Samples</th>
+        </tr>
+    </thead>
+    <tbody>
+        @{
+            var metrics = repo.QueryMetrics(query);
+            if (!metrics.Any())
+            {
+                <tr>
+                    <td colspan="6" style="text-align: center; font-style: italic;">No metrics found</td>
+                </tr>
+            }
+            @foreach (var metric in repo.QueryMetrics(query))
+            {
+                <tr>
+                    @if (string.IsNullOrEmpty(query.ServiceName))
+                    {
+                        <td>@metric.ServiceName</td>
+                    }
+                    @if (string.IsNullOrEmpty(query.ScopeName))
+                    {
+                        <td>@metric.Scope.Name</td>
+                    }
+                    <td>@metric.Name</td>
+                    <td>@metric.Description</td>
+                    <td>@metric.Type</td>
+                    <td>@metric.SampleCount</td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+
+@code {
+
+    [Inject]
+    private Query query { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+
+}

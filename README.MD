@@ -6,18 +6,17 @@ It uses the official [**OpenTelemetry protobuf definitions**](https://github.com
 
 End-to-end observability in a single app. All in one process — no collector, no external storage, no dependencies:
 
-* 📥 **Receives telemetry** (traces, metrics, logs) over OTLP/gRPC
-* 🧠 **Parses OTLP messages** using the official **OpenTelemetry proto files**
-* 💾 **Persists data** with **SQLite**
-* 🖥️ **Visualizes telemetry** via a modern Blazor UI
-* 🎨 Uses [**Pico.css**](https://picocss.com/) for modern, minimal styling without JavaScript
-* 🧪 Supports any OTLP-compatible client (.NET, Python, Go, etc.)
+* **Receives telemetry** (traces, metrics, logs) over OTLP/gRPC
+* **Parses OTLP messages** using the official **OpenTelemetry proto files**
+* **Persists data** with **SQLite**
+* **Visualizes telemetry** via a modern Blazor UI
+* Supports any OTLP-compatible client (.NET, Python, Go, etc.)
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-* [.NET 9 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0)
+* [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 * Optional: OTLP-compatible client (e.g., app with OpenTelemetry SDK)
 
 ### Run the App
@@ -42,7 +41,7 @@ dotnet run
 
 Signals uses the **OpenTelemetry Protocol (OTLP) protobuf definitions** to:
 
-* Implement the `TraceService`, `MetricsService`, and `LogsService` gRPC interfaces (see roadmap)
+* Implement the `TraceService`, `MetricsService`, and `LogsService` gRPC interfaces
 * Deserialize incoming telemetry payloads directly from the wire
 
 The `.proto` files are compiled into C# classes during build using `Grpc.Tools`.
@@ -56,10 +55,12 @@ Signals is currently usable for **local development and prototyping**. gRPC endp
 
 ## ✅ Roadmap
 
-- [ ] Span visualizer
+- [x] Traces
+- [x] Metrics
+- [x] Logs
+- [ ] Span visualization
+- [ ] Metric visualization
 - [ ] Alerts
-- [ ] Metrics
-- [ ] Logs
 
 ## 📄 License
 
