@@ -13,13 +13,15 @@ namespace OpenTelemetry.Proto.Trace.V1
         public InstrumentationScope Scope { get; set; }
         public string GetFormattedStartTime()
         {
-            var dateTime = DateTimeOffset.FromUnixTimeSeconds((long)(StartTimeUnixNano / 1_000_000_000));
+            var epoch = DateTimeOffset.FromUnixTimeSeconds(0);
+            var dateTime = epoch.AddTicks((long)(StartTimeUnixNano / 100));
             return dateTime.ToString("o");
         }
 
         public string GetFormattedEndTime()
         {
-            var dateTime = DateTimeOffset.FromUnixTimeSeconds((long)(EndTimeUnixNano / 1_000_000_000));
+            var epoch = DateTimeOffset.FromUnixTimeSeconds(0);
+            var dateTime = epoch.AddTicks((long)(EndTimeUnixNano / 100));
             return dateTime.ToString("o");
         }
 
@@ -88,16 +90,11 @@ namespace Signals.Telemetry
             var command = _connection.CreateCommand();
 
             // Time range
-            if (query.StartTime.HasValue)
-            {
-                conditions.Add("t.start_time_unix_nano >= @from");
-                command.Parameters.AddWithValue("@from", query.StartTime.Value.ToUnixTimeNanoseconds());
-            }
-            if (query.EndTime.HasValue)
-            {
-                conditions.Add("t.start_time_unix_nano <= @to");
-                command.Parameters.AddWithValue("@to", query.EndTime.Value.ToUnixTimeNanoseconds());
-            }
+            conditions.Add("t.start_time_unix_nano >= @from");
+            command.Parameters.AddWithValue("@from", query.StartTime.ToUniversalTime().ToUnixTimeNanoseconds());
+
+            conditions.Add("t.start_time_unix_nano <= @to");
+            command.Parameters.AddWithValue("@to", query.EndTime.ToUniversalTime().ToUnixTimeNanoseconds());
 
             // Service filter
             if (!string.IsNullOrEmpty(query.ServiceName))
@@ -123,11 +120,8 @@ namespace Signals.Telemetry
             // Parent filter
             if (query.ParentSpanId != null)
             {
-                conditions.Add("t.parent_span_id = @parent_span_id");
+                conditions.Add("(t.parent_span_id = @parent_span_id OR t.span_id = @parent_span_id)");
                 command.Parameters.AddWithValue("@parent_span_id", query.ParentSpanId.ToByteArray());
-            } else if (query.ParentSpanId == ByteString.Empty) // Special case to filter root spans
-            {
-                conditions.Add("t.parent_span_id IS NULL");
             }
 
             // Trace filter
@@ -153,7 +147,7 @@ namespace Signals.Telemetry
                 JOIN resources r ON t.resource_id = r.id
                 JOIN scopes s ON t.scope_id = s.id
                 {whereClause}
-                ORDER BY t.start_time_unix_nano DESC
+                ORDER BY t.start_time_unix_nano {query.SortOrder}
                 LIMIT @limit OFFSET @offset
             ";
 

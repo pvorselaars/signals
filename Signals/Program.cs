@@ -39,6 +39,7 @@ builder.Services.AddRazorComponents()
 
 var serviceVersion = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
 
+/*
 builder.Services.AddOpenTelemetry()
                 .ConfigureResource(resource => resource
                 .AddService(serviceName: builder.Environment.ApplicationName, serviceVersion: serviceVersion, serviceInstanceId: Guid.Empty.ToString()))
@@ -63,6 +64,7 @@ builder.Services.AddOpenTelemetry()
                             };
                         }))
                 .WithLogging(logging => logging.AddOtlpExporter());
+                */
 
 StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
 

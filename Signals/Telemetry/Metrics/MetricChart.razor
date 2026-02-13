@@ -1,0 +1,40 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using OpenTelemetry.Proto.Metrics.V1
+@using System.Globalization
+@inherits Signals.Telemetry.Charts.ChartBase
+
+<svg @ref="SvgRef" width="100%" height="310" viewBox="0 0 @CurrentWidth 310" preserveAspectRatio="none" class="sum-chart">
+    <line x1="0" y1="30" x2="@CurrentWidth" y2="30" stroke="#999" stroke-width="2" />
+    <line x1="0" y1="300" x2="@CurrentWidth" y2="300" stroke="#999" stroke-width="2" />
+
+    @foreach (var t in GetTicks())
+    {
+        var x = MapDateTimeToX(t);
+        <line x1="@x" y1="30" x2="@x" y2="20" stroke="#999" stroke-width="1" />
+        <text>
+        <text x="@x" y="10" font-size="12" text-anchor="middle" fill="white">@FormatTick(t)</text>
+        </text>
+    }
+
+    @foreach (var m in Metrics)
+    {
+        @foreach (var d in m.GetDataPoints())
+        {
+            var val = d.HasAsDouble ? d.AsDouble : d.AsInt;
+            var max = m.GetDataPoints().Select(dp => dp.HasAsDouble ? dp.AsDouble : dp.AsInt).Max();
+            var y = val > 0 ? 300 - (int)(val / max * 250) : 300; // Simple normalization to fit in the chart
+            var x = MapUnixNanoToX(d.TimeUnixNano);
+            <circle cx="@x" cy="@y" r="2" class="primary">
+            <title>
+            @m.Name
+            </title>
+            </circle>
+        }
+    }
+
+</svg>
+
+@code {
+    [Parameter] public IEnumerable<Metric> Metrics { get; set; } = [];
+
+}

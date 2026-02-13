@@ -58,7 +58,7 @@ Signals is currently usable for **local development and prototyping**. gRPC endp
 - [x] Traces
 - [x] Metrics
 - [x] Logs
-- [ ] Span visualization
+- [x] Span visualization
 - [ ] Metric visualization
 - [ ] Alerts
 

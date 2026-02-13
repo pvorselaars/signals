@@ -13,10 +13,21 @@ namespace OpenTelemetry.Proto.Metrics.V1
         public string ServiceName { get; set; } = "";
         public string ServiceInstanceId { get; set; } = "";
         public InstrumentationScope Scope { get; set; }
-        public DataOneofCase Type { get; set; }
 
-        public long SampleCount { get; set; }
+        public long Samples => DataCase switch
+        {
+            DataOneofCase.Gauge => Gauge.DataPoints.Count,
+            DataOneofCase.Sum => Sum.DataPoints.Count,
+            DataOneofCase.Histogram => Histogram.DataPoints.Count,
+            _ => 0
+        };
 
+        public IEnumerable<NumberDataPoint> GetDataPoints() => DataCase switch
+        {
+            DataOneofCase.Gauge => Gauge.DataPoints,
+            DataOneofCase.Sum => Sum.DataPoints,
+            _ => Enumerable.Empty<NumberDataPoint>()
+        };
 
     }
 }
@@ -38,7 +49,7 @@ namespace Signals.Telemetry
 
                     foreach (var metric in scopeMetric.Metrics)
                     {
-                        var metricId = GetOrCreateMetric(metric.Name, (int)metric.DataCase, metric.Unit, metric.Description);
+                        var metricId = GetOrCreateMetric(metric);
                         InsertMetricDataPoints(resourceId, metricId, scopeId, metric);
                     }
                 }
@@ -68,28 +79,23 @@ namespace Signals.Telemetry
             }
 
             // Time filters
-            if (query.StartTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano >= @start_time");
-                command.Parameters.AddWithValue("@start_time", query.StartTime.Value.ToUnixTimeNanoseconds());
-            }
-            if (query.EndTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano <= @end_time");
-                command.Parameters.AddWithValue("@end_time", query.EndTime.Value.ToUnixTimeNanoseconds());
-            }
+            conditions.Add("dp.time_unix_nano >= @start_time");
+            command.Parameters.AddWithValue("@start_time", query.StartTime.ToUnixTimeNanoseconds());
+        
+            conditions.Add("dp.time_unix_nano <= @end_time");
+            command.Parameters.AddWithValue("@end_time", query.EndTime.ToUnixTimeNanoseconds());
 
             var whereClause = conditions.Count != 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
 
             command.CommandText = $@"
                 SELECT
+                    m.id,
                     r.service_name,
                     r.service_instance_id,
                     s.scope_name,
                     m.metric_name,
                     m.metric_type,
-                    m.metric_description,
-                    COUNT(*) AS count
+                    m.metric_description
                 FROM data_points AS dp
                 LEFT JOIN resources AS r ON r.id = dp.resource_id
                 JOIN metrics   AS m ON m.id = dp.metric_id
@@ -110,13 +116,24 @@ namespace Signals.Telemetry
                 var metricId = reader.GetInt64(0);
                 var metric = new Metric
                 {
-                    ServiceName = reader.GetString(0),
-                    Scope = new InstrumentationScope { Name = reader.GetString(2) },
-                    Name = reader.GetString(3),
-                    Type = (Metric.DataOneofCase)reader.GetInt32(4),
-                    Description = reader.IsDBNull(5) ? "" : reader.GetString(5),
-                    SampleCount = reader.GetInt64(6)
+                    ServiceName = reader.GetString(1),
+                    Scope = new InstrumentationScope { Name = reader.GetString(3) },
+                    Name = reader.GetString(4),
+                    Description = reader.IsDBNull(6) ? "" : reader.GetString(6),
                 };
+
+                switch ((Metric.DataOneofCase)reader.GetInt32(5))
+                {
+                    case Metric.DataOneofCase.Gauge:
+                        metric.Gauge = new Gauge();
+                        break;
+                    case Metric.DataOneofCase.Sum:
+                        metric.Sum = new Sum();
+                        break;
+                    case Metric.DataOneofCase.Histogram:
+                        metric.Histogram = new Histogram();
+                        break;
+                }
 
                 GetDataPoints(metric, metricId, query);
 
@@ -131,17 +148,11 @@ namespace Signals.Telemetry
             var conditions = new List<string>();
             var command = _connection.CreateCommand();
 
-            if (query.StartTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano >= @start_time");
-                command.Parameters.AddWithValue("@start_time", query.StartTime.Value.ToUnixTimeMilliseconds() * 1_000_000);
-            }
+            conditions.Add("dp.time_unix_nano >= @start_time");
+            command.Parameters.AddWithValue("@start_time", query.StartTime.ToUnixTimeNanoseconds());
 
-            if (query.EndTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano <= @end_time");
-                command.Parameters.AddWithValue("@end_time", query.EndTime.Value.ToUnixTimeMilliseconds() * 1_000_000);
-            }
+            conditions.Add("dp.time_unix_nano <= @end_time");
+            command.Parameters.AddWithValue("@end_time", query.EndTime.ToUnixTimeNanoseconds());
 
             if (query.ServiceName != null)
             {
@@ -192,72 +203,40 @@ namespace Signals.Telemetry
                     metric.Sum.DataPoints.Add(dataPoint);
                 }
             }
-            else if (metric.DataCase == Metric.DataOneofCase.Histogram)
-            {
-                while (reader.Read())
-                {
-                    var dataPoint = new HistogramDataPoint
-                    {
-                        TimeUnixNano = (ulong)reader.GetInt64(1),
-                        Count = (ulong)reader.GetInt64(4),
-                        Sum = reader.GetDouble(5),
-                        Min = reader.GetDouble(6),
-                        Max = reader.GetDouble(7)
-                    };
-                    metric.Histogram.DataPoints.Add(dataPoint);
-                }
-
-            }
-
         }
 
         private void InsertMetricDataPoints(long resourceId, long metricId, long scopeId, Metric metric)
         {
             var command = _connection.CreateCommand();
 
-            var dataPoints = new List<(long timeUnixNano, double? valueDouble, long? valueInt, long? count, double? sumValue, double? minValue, double? maxValue)>();
+            var datapoints = new List<NumberDataPoint>();
 
             switch (metric.DataCase)
             {
                 case Metric.DataOneofCase.Gauge:
-                    foreach (var dataPoint in metric.Gauge.DataPoints)
-                    {
-                        var (valueDouble, valueInt) = GetDataPointValues(dataPoint);
-                        dataPoints.Add(((long)dataPoint.TimeUnixNano, valueDouble, valueInt, null, null, null, null));
-                    }
+                    datapoints.AddRange(metric.Gauge.DataPoints);
                     break;
 
                 case Metric.DataOneofCase.Sum:
-                    foreach (var dataPoint in metric.Sum.DataPoints)
-                    {
-                        var (valueDouble, valueInt) = GetDataPointValues(dataPoint);
-                        dataPoints.Add(((long)dataPoint.TimeUnixNano, valueDouble, valueInt, null, null, null, null));
-                    }
-                    break;
-
-                case Metric.DataOneofCase.Histogram:
-                    foreach (var dataPoint in metric.Histogram.DataPoints)
-                    {
-                        dataPoints.Add(((long)dataPoint.TimeUnixNano, null, null, (long)dataPoint.Count, dataPoint.Sum, dataPoint.Min, dataPoint.Max));
-                    }
+                    datapoints.AddRange(metric.Sum.DataPoints);
                     break;
 
                 default:
                     return;
             }
 
-            if (dataPoints.Count == 0) return;
+            if (datapoints.Count == 0) return;
 
             var valuesClauses = new List<string>();
-            for (int i = 0; i < dataPoints.Count; i++)
+            for (int i = 0; i < datapoints.Count; i++)
             {
-                valuesClauses.Add($"(@resource_id, @metric_id, @scope_id, @time_unix_nano_{i}, @value_double_{i}, @value_int_{i}, @count_{i}, @sum_value_{i}, @min_value_{i}, @max_value_{i})");
+                valuesClauses.Add($"(@resource_id, @metric_id, @scope_id, @time_unix_nano_{i}, @value_double_{i}, @value_int_{i})");
             }
 
             command.CommandText = $@"
                 INSERT INTO data_points (
                     resource_id, metric_id, scope_id, time_unix_nano,
-                    value_double, value_int, count, sum_value, min_value, max_value
+                    value_double, value_int
                 ) VALUES {string.Join(", ", valuesClauses)}
             ";
 
@@ -266,32 +245,18 @@ namespace Signals.Telemetry
             command.Parameters.AddWithValue("@metric_id", metricId);
             command.Parameters.AddWithValue("@scope_id", scopeId);
 
-            for (int i = 0; i < dataPoints.Count; i++)
+            for (int i = 0; i < datapoints.Count; i++)
             {
-                var (timeUnixNano, valueDouble, valueInt, count, sumValue, minValue, maxValue) = dataPoints[i];
-                command.Parameters.AddWithValue($"@time_unix_nano_{i}", timeUnixNano);
-                command.Parameters.AddWithValue($"@value_double_{i}", valueDouble ?? (object)DBNull.Value);
-                command.Parameters.AddWithValue($"@value_int_{i}", valueInt ?? (object)DBNull.Value);
-                command.Parameters.AddWithValue($"@count_{i}", count ?? (object)DBNull.Value);
-                command.Parameters.AddWithValue($"@sum_value_{i}", sumValue ?? (object)DBNull.Value);
-                command.Parameters.AddWithValue($"@min_value_{i}", minValue ?? (object)DBNull.Value);
-                command.Parameters.AddWithValue($"@max_value_{i}", maxValue ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue($"@time_unix_nano_{i}", datapoints[i].TimeUnixNano);
+                command.Parameters.AddWithValue($"@value_double_{i}", datapoints[i].AsDouble);
+                command.Parameters.AddWithValue($"@value_int_{i}", datapoints[i].AsInt);
             }
 
             command.ExecuteNonQuery();
         }
 
-        private static (double? valueDouble, long? valueInt) GetDataPointValues(NumberDataPoint dataPoint)
-        {
-            return dataPoint.ValueCase switch
-            {
-                NumberDataPoint.ValueOneofCase.AsDouble => (dataPoint.AsDouble, 0),
-                NumberDataPoint.ValueOneofCase.AsInt => (0, dataPoint.AsInt),
-                _ => (null, null)
-            };
-        }
 
-        private long GetOrCreateMetric(string metricName, int metricType, string? metricUnit, string? metricDescription)
+        private long GetOrCreateMetric(Metric metric)
         {
             using var command = _connection.CreateCommand();
 
@@ -301,8 +266,8 @@ namespace Signals.Telemetry
             AND metric_type = @metric_type
         ";
 
-            command.Parameters.AddWithValue("@metric_name", metricName);
-            command.Parameters.AddWithValue("@metric_type", metricType);
+            command.Parameters.AddWithValue("@metric_name", metric.Name);
+            command.Parameters.AddWithValue("@metric_type", metric.DataCase);
 
             var existingId = command.ExecuteScalar();
             if (existingId != null)
@@ -317,10 +282,10 @@ namespace Signals.Telemetry
         ";
 
             command.Parameters.Clear();
-            command.Parameters.AddWithValue("@metric_name", metricName);
-            command.Parameters.AddWithValue("@metric_type", metricType);
-            command.Parameters.AddWithValue("@metric_unit", metricUnit ?? (object)DBNull.Value);
-            command.Parameters.AddWithValue("@metric_description", metricDescription ?? (object)DBNull.Value);
+            command.Parameters.AddWithValue("@metric_name", metric.Name);
+            command.Parameters.AddWithValue("@metric_type", metric.DataCase);
+            command.Parameters.AddWithValue("@metric_unit", metric.Unit);
+            command.Parameters.AddWithValue("@metric_description", metric.Description);
 
             return (long)command.ExecuteScalar()!;
         }

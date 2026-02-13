@@ -34,14 +34,14 @@ public class MetricTests
         Assert.AreEqual("test-scope", metrics[0].Scope.Name);
         Assert.AreEqual("test.gauge", metrics[0].Name);
         Assert.AreEqual("Test gauge metric", metrics[0].Description);
-        Assert.AreEqual(Metric.DataOneofCase.Gauge, metrics[0].Type);
+        Assert.AreEqual(Metric.DataOneofCase.Gauge, metrics[0].DataCase);
         Assert.AreEqual("test-service", metrics[1].ServiceName);
         Assert.AreEqual("test-scope", metrics[1].Scope.Name);
         Assert.AreEqual("test.counter", metrics[1].Name);
         Assert.AreEqual("Test counter metric", metrics[1].Description);
-        Assert.AreEqual(Metric.DataOneofCase.Sum, metrics[1].Type);
-        Assert.AreEqual(1, metrics[0].SampleCount);
-        Assert.AreEqual(1, metrics[1].SampleCount);
+        Assert.AreEqual(Metric.DataOneofCase.Sum, metrics[1].DataCase);
+        Assert.AreEqual(1, metrics[0].Samples);
+        Assert.AreEqual(1, metrics[1].Samples);
     }
 
     [TestMethod]
@@ -74,7 +74,7 @@ public class MetricTests
         var metrics = _repository.QueryMetrics(query);
 
         Assert.HasCount(1, metrics);
-        Assert.AreEqual(10, metrics[0].SampleCount);
+        Assert.AreEqual(10, metrics[0].Samples);
     }
 
 
@@ -138,7 +138,7 @@ public class MetricTests
 
         gaugeMetric.Gauge.DataPoints.Add(new NumberDataPoint
         {
-            TimeUnixNano = time.ToUnixTimeNanoseconds(),
+            TimeUnixNano = time.AddSeconds(-3).ToUnixTimeNanoseconds(),
             AsDouble = 85.5
         });
 

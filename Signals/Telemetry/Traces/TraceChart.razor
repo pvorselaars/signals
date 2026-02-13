@@ -1,0 +1,39 @@
+@using OpenTelemetry.Proto.Trace.V1
+@inherits Signals.Telemetry.Charts.ChartBase
+
+<svg @ref="SvgRef" width="100%" height="@CurrentHeight" viewBox="0 0 @CurrentWidth @CurrentHeight" preserveAspectRatio="none" class="trace-chart">
+    <line x1="0" y1="30" x2="@CurrentWidth" y2="30" stroke="#999" stroke-width="2" />
+
+    @foreach (var t in GetTicks())
+    {
+        var x = MapDateTimeToX(t);
+        <line x1="@x" y1="30" x2="@x" y2="20" stroke="#999" stroke-width="1" />
+        <text>
+        <text x="@x" y="10" font-size="12" text-anchor="middle" fill="white">@FormatTick(t.ToLocalTime())</text>
+        </text>
+    }
+    
+    @for (var i = 0; i < Spans.Count(); i++)
+    {
+        var span = Spans.ElementAt(i);
+        var x = MapUnixNanoToX(span.StartTimeUnixNano);
+        var width = MapUnixNanoToX(span.EndTimeUnixNano) - x;
+        var y = i * 10 + 40;
+        <rect x="@x" y="@y" width="@width" height="5" class="@(i > 0 && !Selection ? "secondary" : "primary")">
+        <title>
+        @span.Name
+Start: @span.GetFormattedStartTime()
+Duration: @span.GetFormattedDuration()
+        </title>
+        </rect>
+    }
+</svg>
+
+@code {
+    [Parameter] public IEnumerable<Span> Spans { get; set; } = [];
+    
+    [Parameter] public bool Selection { get; set; } = false;
+
+    private int CurrentHeight => (Spans.Count() * 10) + 50;
+
+}

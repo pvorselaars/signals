@@ -106,10 +106,10 @@ public sealed partial class Repository : IDisposable
         public event Action? OnChange;
         internal void NotifyStateChanged() => OnChange?.Invoke();
 
-        private DateTimeOffset? _startTime = DateTimeOffset.UtcNow.AddHours(-1).ToLocalTime();
-        public DateTimeOffset? StartTime { get => _startTime; set { if (_startTime != value) { _startTime = value; NotifyStateChanged(); } } }
-        private DateTimeOffset? _endTime = DateTimeOffset.UtcNow.ToLocalTime();
-        public DateTimeOffset? EndTime { get => _endTime; set { if (_endTime != value) { _endTime = value; NotifyStateChanged(); } } }
+        private DateTime _startTime = DateTime.Now.AddHours(-1); //new DateTime(2026, 2, 12, 14, 30, 0);
+        public DateTime StartTime { get => _startTime; set { if (_startTime != value) { _startTime = value; NotifyStateChanged(); } } }
+        private DateTime _endTime = DateTime.Now; //new DateTime(2026, 2, 12, 14, 31, 0);
+        public DateTime EndTime { get => _endTime; set { if (_endTime != value) { _endTime = value; NotifyStateChanged(); } } }
 
         private string? _serviceName;
         public string? ServiceName { get => _serviceName; set { if (_serviceName != value) { _serviceName = value; NotifyStateChanged(); } } }
@@ -131,7 +131,11 @@ public sealed partial class Repository : IDisposable
         private string? _spanName;
         public string? SpanName { get => _spanName; set { if (_spanName != value) { _spanName = value; NotifyStateChanged(); } } }
 
-        private ByteString? _partentSpanId;
+        private SortOrder _sortOrder = SortOrder.Desc;
+
+        public SortOrder SortOrder { get => _sortOrder; set { _sortOrder = value; NotifyStateChanged(); }}
+
+        private ByteString? _partentSpanId = ByteString.Empty;
         public ByteString? ParentSpanId { get => _partentSpanId; set { if (_partentSpanId != value) { _partentSpanId = value; NotifyStateChanged(); } } }
 
         private ByteString? _traceId;
@@ -146,4 +150,10 @@ public sealed partial class Repository : IDisposable
     }
 
     public void Dispose() => _connection?.Dispose();
+
+    public enum SortOrder {
+        Desc,
+        Asc
+
+    }
 }

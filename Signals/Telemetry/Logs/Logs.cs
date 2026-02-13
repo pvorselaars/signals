@@ -1,6 +1,7 @@
 using Google.Protobuf;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Logs.V1;
+using Signals.Common.Utilities;
 
 namespace OpenTelemetry.Proto.Logs.V1
 {
@@ -99,16 +100,10 @@ namespace Signals.Telemetry
             var command = _connection.CreateCommand();
 
             // Time range
-            if (query.StartTime.HasValue)
-            {
-                conditions.Add("l.time_unix_nano >= @from");
-                command.Parameters.AddWithValue("@from", query.StartTime.Value.ToUnixTimeSeconds() * 1_000_000_000L);
-            }
-            if (query.EndTime.HasValue)
-            {
-                conditions.Add("l.time_unix_nano <= @to");
-                command.Parameters.AddWithValue("@to", query.EndTime.Value.ToUnixTimeSeconds() * 1_000_000_000L);
-            }
+            conditions.Add("l.time_unix_nano >= @from");
+            command.Parameters.AddWithValue("@from", query.StartTime.ToUnixTimeNanoseconds());
+            conditions.Add("l.time_unix_nano <= @to");
+            command.Parameters.AddWithValue("@to", query.EndTime.ToUnixTimeNanoseconds());
 
             // Service filter
             if (!string.IsNullOrEmpty(query.ServiceName))
@@ -191,7 +186,7 @@ namespace Signals.Telemetry
             return logs;
         }
 
-        public Dictionary<string, long> GetLogCountByService(DateTimeOffset? from, DateTimeOffset? to)
+        public Dictionary<string, long> GetLogCountByService(DateTime? from, DateTime? to)
         {
             var command = _connection.CreateCommand();
             var conditions = new List<string>();
@@ -199,12 +194,12 @@ namespace Signals.Telemetry
             if (from.HasValue)
             {
                 conditions.Add("l.time_unix_nano >= @from");
-                command.Parameters.AddWithValue("@from", from.Value.ToUnixTimeSeconds() * 1_000_000_000L);
+                command.Parameters.AddWithValue("@from", from.Value.ToUnixTimeNanoseconds());
             }
             if (to.HasValue)
             {
                 conditions.Add("l.time_unix_nano <= @to");
-                command.Parameters.AddWithValue("@to", to.Value.ToUnixTimeSeconds() * 1_000_000_000L);
+                command.Parameters.AddWithValue("@to", to.Value.ToUnixTimeNanoseconds());
             }
 
             var whereClause = conditions.Any() ? "WHERE " + string.Join(" AND ", conditions) : "";
