@@ -1,6 +1,6 @@
 # Signals
 
-**Signals** is a self-contained **.NET 9 Blazor** application that acts as a lightweight OpenTelemetry backend. It directly **receives OTLP/gRPC telemetry signals**, stores them in a **SQLite database**, and visualizes them through a built-in **UI**.
+**Signals** is a self-contained **.NET 10 Blazor** application that acts as a lightweight OpenTelemetry backend. It directly **receives OTLP/gRPC telemetry signals**, stores them in a **SQLite database**, and visualizes them through a built-in **UI**.
 
 It uses the official [**OpenTelemetry protobuf definitions**](https://github.com/open-telemetry/opentelemetry-proto) for decoding and processing telemetry data, with no need for an external collector.
 
