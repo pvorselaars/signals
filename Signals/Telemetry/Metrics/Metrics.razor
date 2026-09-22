@@ -57,7 +57,7 @@
                     <td colspan="6" style="text-align: center; font-style: italic;">No metrics found</td>
                 </tr>
             }
-            @foreach (var metric in repo.QueryMetrics(query))
+            @foreach (var metric in metrics)
             {
                 <tr>
                     @if (string.IsNullOrEmpty(query.ServiceName))
