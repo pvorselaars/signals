@@ -32,7 +32,11 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddSingleton<Repository>();
 builder.Services.AddScoped<Repository.Query>();
-builder.Services.AddGrpc();
+builder.Services.AddGrpc(options =>
+{
+    options.MaxReceiveMessageSize = 4 * 1024 * 1024;
+    options.Interceptors.Add<ExceptionLoggingInterceptor>();
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
