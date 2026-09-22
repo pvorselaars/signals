@@ -286,8 +286,8 @@ namespace Signals.Telemetry
         {
             return dataPoint.ValueCase switch
             {
-                NumberDataPoint.ValueOneofCase.AsDouble => (dataPoint.AsDouble, 0),
-                NumberDataPoint.ValueOneofCase.AsInt => (0, dataPoint.AsInt),
+                NumberDataPoint.ValueOneofCase.AsDouble => (dataPoint.AsDouble, null),
+                NumberDataPoint.ValueOneofCase.AsInt => (null, dataPoint.AsInt),
                 _ => (null, null)
             };
         }
