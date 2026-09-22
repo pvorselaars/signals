@@ -89,7 +89,8 @@ namespace Signals.Telemetry
                     m.metric_name,
                     m.metric_type,
                     m.metric_description,
-                    COUNT(*) AS count
+                    COUNT(*) AS count,
+                    m.id AS metric_id
                 FROM data_points AS dp
                 LEFT JOIN resources AS r ON r.id = dp.resource_id
                 JOIN metrics   AS m ON m.id = dp.metric_id
@@ -107,7 +108,7 @@ namespace Signals.Telemetry
 
             while (reader.Read())
             {
-                var metricId = reader.GetInt64(0);
+                var metricId = reader.GetInt64(7);
                 var metric = new Metric
                 {
                     ServiceName = reader.GetString(0),
