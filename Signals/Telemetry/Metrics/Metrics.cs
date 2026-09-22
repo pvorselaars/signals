@@ -96,32 +96,45 @@ namespace Signals.Telemetry
             command.Parameters.AddWithValue("@offset", query.Offset);
 
             var results = new List<Metric>();
-            using var reader = command.ExecuteReader();
+            var metricIds = new List<long>();
 
-            while (reader.Read())
+            using (var reader = command.ExecuteReader())
             {
-                var metricId = reader.GetInt64(7);
-                var metric = new Metric
+                while (reader.Read())
                 {
-                    ServiceName = reader.GetString(0),
-                    Scope = new InstrumentationScope { Name = reader.GetString(2) },
-                    Name = reader.GetString(3),
-                    Type = (Metric.DataOneofCase)reader.GetInt32(4),
-                    Description = reader.IsDBNull(5) ? "" : reader.GetString(5),
-                    SampleCount = reader.GetInt64(6)
-                };
+                    results.Add(new Metric
+                    {
+                        ServiceName = reader.GetString(0),
+                        Scope = new InstrumentationScope { Name = reader.GetString(2) },
+                        Name = reader.GetString(3),
+                        Type = (Metric.DataOneofCase)reader.GetInt32(4),
+                        Description = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                        SampleCount = reader.GetInt64(6)
+                    });
+                    metricIds.Add(reader.GetInt64(7));
+                }
+            }
 
-                GetDataPoints(metric, metricId, query);
-
-                results.Add(metric);
+            // Fetch every returned metric's data points in one batched query instead
+            // of one extra round trip per metric (previously up to Limit+1 queries).
+            if (results.Count > 0)
+            {
+                var rowsByMetric = GetDataPointRows(connection, metricIds, query);
+                for (int i = 0; i < results.Count; i++)
+                {
+                    PopulateDataPoints(results[i], rowsByMetric[metricIds[i]]);
+                }
             }
 
             return results;
         }
 
-        private void GetDataPoints(Metric metric, long metricId, Query query)
+        private readonly record struct DataPointRow(
+            long MetricId, string ServiceName, long TimeUnixNano,
+            double ValueDouble, long ValueInt, long Count, double SumValue, double MinValue, double MaxValue);
+
+        private static ILookup<long, DataPointRow> GetDataPointRows(SqliteConnection connection, IReadOnlyCollection<long> metricIds, Query query)
         {
-            using var connection = CreateConnection();
             using var command = connection.CreateCommand();
             var conditions = new SqlConditions(command);
 
@@ -134,63 +147,86 @@ namespace Signals.Telemetry
             if (query.ServiceName != null)
                 conditions.Add("r.service_name = @service_name", "@service_name", query.ServiceName);
 
-            conditions.Add("dp.metric_id = @metric_id", "@metric_id", metricId);
+            var placeholders = new List<string>();
+            var i = 0;
+            foreach (var metricId in metricIds)
+            {
+                var name = $"@metric_id_{i++}";
+                placeholders.Add(name);
+                command.Parameters.AddWithValue(name, metricId);
+            }
+            conditions.AddRaw($"dp.metric_id IN ({string.Join(", ", placeholders)})");
 
             command.CommandText = $@"
             SELECT
-                r.service_name, dp.time_unix_nano, dp.value_double, dp.value_int, dp.count, dp.sum_value, dp.min_value, dp.max_value
+                dp.metric_id, r.service_name, dp.time_unix_nano, dp.value_double, dp.value_int, dp.count, dp.sum_value, dp.min_value, dp.max_value
             FROM data_points dp
             JOIN resources r ON dp.resource_id = r.id
             {conditions.WhereClause}
             ORDER BY r.service_name DESC, dp.time_unix_nano DESC
         ";
 
+            var rows = new List<DataPointRow>();
             using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add(new DataPointRow(
+                    reader.GetInt64(0),
+                    reader.GetString(1),
+                    reader.GetInt64(2),
+                    reader.IsDBNull(3) ? 0 : reader.GetDouble(3),
+                    reader.IsDBNull(4) ? 0 : reader.GetInt64(4),
+                    reader.IsDBNull(5) ? 0 : reader.GetInt64(5),
+                    reader.IsDBNull(6) ? 0 : reader.GetDouble(6),
+                    reader.IsDBNull(7) ? 0 : reader.GetDouble(7),
+                    reader.IsDBNull(8) ? 0 : reader.GetDouble(8)
+                ));
+            }
 
+            return rows.ToLookup(r => r.MetricId);
+        }
+
+        private static void PopulateDataPoints(Metric metric, IEnumerable<DataPointRow> rows)
+        {
             if (metric.DataCase == Metric.DataOneofCase.Gauge)
             {
-                while (reader.Read())
+                foreach (var row in rows)
                 {
-                    metric.ServiceName = reader.GetString(0);
-                    var dataPoint = new NumberDataPoint
+                    metric.ServiceName = row.ServiceName;
+                    metric.Gauge.DataPoints.Add(new NumberDataPoint
                     {
-                        TimeUnixNano = (ulong)reader.GetInt64(1),
-                        AsDouble = reader.GetDouble(2),
-                        AsInt = reader.GetInt64(3)
-                    };
-                    metric.Gauge.DataPoints.Add(dataPoint);
+                        TimeUnixNano = (ulong)row.TimeUnixNano,
+                        AsDouble = row.ValueDouble,
+                        AsInt = row.ValueInt
+                    });
                 }
             }
             else if (metric.DataCase == Metric.DataOneofCase.Sum)
             {
-                while (reader.Read())
+                foreach (var row in rows)
                 {
-                    var dataPoint = new NumberDataPoint
+                    metric.Sum.DataPoints.Add(new NumberDataPoint
                     {
-                        TimeUnixNano = (ulong)reader.GetInt64(1),
-                        AsDouble = reader.GetDouble(2),
-                        AsInt = reader.GetInt64(3)
-                    };
-                    metric.Sum.DataPoints.Add(dataPoint);
+                        TimeUnixNano = (ulong)row.TimeUnixNano,
+                        AsDouble = row.ValueDouble,
+                        AsInt = row.ValueInt
+                    });
                 }
             }
             else if (metric.DataCase == Metric.DataOneofCase.Histogram)
             {
-                while (reader.Read())
+                foreach (var row in rows)
                 {
-                    var dataPoint = new HistogramDataPoint
+                    metric.Histogram.DataPoints.Add(new HistogramDataPoint
                     {
-                        TimeUnixNano = (ulong)reader.GetInt64(1),
-                        Count = (ulong)reader.GetInt64(4),
-                        Sum = reader.GetDouble(5),
-                        Min = reader.GetDouble(6),
-                        Max = reader.GetDouble(7)
-                    };
-                    metric.Histogram.DataPoints.Add(dataPoint);
+                        TimeUnixNano = (ulong)row.TimeUnixNano,
+                        Count = (ulong)row.Count,
+                        Sum = row.SumValue,
+                        Min = row.MinValue,
+                        Max = row.MaxValue
+                    });
                 }
-
             }
-
         }
 
         private static void InsertMetricDataPoints(SqliteTransaction transaction, long resourceId, long metricId, long scopeId, Metric metric)
