@@ -16,7 +16,7 @@
         <option value="">Any scope</option>
         @foreach (var scope in repo.GetUniqueScopes())
         {
-            <option value="@scope.Name">@scope.Name</option>
+            <option value="@scope">@scope</option>
         }
     </select>
     <select id="resource" title="Resource" @bind="query.ServiceName">

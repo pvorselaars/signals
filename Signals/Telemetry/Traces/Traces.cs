@@ -90,76 +90,52 @@ namespace Signals.Telemetry
 
         public List<Span> QuerySpans(Query query)
         {
-            var conditions = new List<string>();
             using var connection = CreateConnection();
             using var command = connection.CreateCommand();
+            var conditions = new SqlConditions(command);
 
             // Time range
             if (query.StartTime.HasValue)
-            {
-                conditions.Add("t.start_time_unix_nano >= @from");
-                command.Parameters.AddWithValue("@from", query.StartTime.Value.ToUnixTimeNanoseconds());
-            }
+                conditions.Add("t.start_time_unix_nano >= @from", "@from", query.StartTime.Value.ToUnixTimeNanoseconds());
             if (query.EndTime.HasValue)
-            {
-                conditions.Add("t.start_time_unix_nano <= @to");
-                command.Parameters.AddWithValue("@to", query.EndTime.Value.ToUnixTimeNanoseconds());
-            }
+                conditions.Add("t.start_time_unix_nano <= @to", "@to", query.EndTime.Value.ToUnixTimeNanoseconds());
 
             // Service filter
             if (!string.IsNullOrEmpty(query.ServiceName))
-            {
-                conditions.Add("r.service_name = @service");
-                command.Parameters.AddWithValue("@service", query.ServiceName);
-            }
+                conditions.Add("r.service_name = @service", "@service", query.ServiceName);
 
             // Scope filter
             if (!string.IsNullOrEmpty(query.ScopeName))
-            {
-                conditions.Add("s.scope_name = @scope");
-                command.Parameters.AddWithValue("@scope", query.ScopeName);
-            }
+                conditions.Add("s.scope_name = @scope", "@scope", query.ScopeName);
 
             // Span name filter
             if (!string.IsNullOrEmpty(query.SpanName))
-            {
-                conditions.Add("t.name = @span_name");
-                command.Parameters.AddWithValue("@span_name", query.SpanName);
-            }
+                conditions.Add("t.name = @span_name", "@span_name", query.SpanName);
 
             // Parent filter
             if (query.ParentSpanId != null)
             {
-                conditions.Add("t.parent_span_id = @parent_span_id");
-                command.Parameters.AddWithValue("@parent_span_id", query.ParentSpanId.ToByteArray());
+                conditions.Add("t.parent_span_id = @parent_span_id", "@parent_span_id", query.ParentSpanId.ToByteArray());
             } else if (query.ParentSpanId == ByteString.Empty) // Special case to filter root spans
             {
-                conditions.Add("t.parent_span_id IS NULL");
+                conditions.AddRaw("t.parent_span_id IS NULL");
             }
 
             // Trace filter
             if (query.TraceId != null)
-            {
-                conditions.Add("t.trace_id = @trace_id");
-                command.Parameters.AddWithValue("@trace_id", query.TraceId.ToByteArray());
-            }
+                conditions.Add("t.trace_id = @trace_id", "@trace_id", query.TraceId.ToByteArray());
 
             // Text filter
             if (!string.IsNullOrEmpty(query.Text))
-            {
-                conditions.Add("t.name LIKE @text");
-                command.Parameters.AddWithValue("@text", $"%{query.Text}%");
-            }
-
-            var whereClause = conditions.Any() ? "WHERE " + string.Join(" AND ", conditions) : "";
+                conditions.Add("t.name LIKE @text", "@text", $"%{query.Text}%");
 
             command.CommandText = $@"
-                SELECT 
+                SELECT
                     t.json, r.service_name, r.service_instance_id, s.scope_name
                 FROM spans t
                 JOIN resources r ON t.resource_id = r.id
                 JOIN scopes s ON t.scope_id = s.id
-                {whereClause}
+                {conditions.WhereClause}
                 ORDER BY t.start_time_unix_nano DESC
                 LIMIT @limit OFFSET @offset
             ";
@@ -180,27 +156,6 @@ namespace Signals.Telemetry
             }
 
             return results;
-        }
-
-
-        public List<string> GetUniqueTraceScopes()
-        {
-            using var connection = CreateConnection();
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-            SELECT DISTINCT s.scope_name
-            FROM spans 
-            JOIN scopes s ON spans.scope_id = s.id
-            ORDER BY scope_name";
-
-            var scopes = new List<string>();
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                scopes.Add(reader.GetString(0));
-            }
-
-            return scopes;
         }
 
     }

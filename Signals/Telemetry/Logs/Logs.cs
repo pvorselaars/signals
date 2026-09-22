@@ -101,70 +101,46 @@ namespace Signals.Telemetry
         public List<LogRecord> QueryLogs(Query query)
         {
 
-            var conditions = new List<string>();
             using var connection = CreateConnection();
             using var command = connection.CreateCommand();
+            var conditions = new SqlConditions(command);
 
             // Time range
             if (query.StartTime.HasValue)
-            {
-                conditions.Add("l.time_unix_nano >= @from");
-                command.Parameters.AddWithValue("@from", query.StartTime.Value.ToUnixTimeSeconds() * 1_000_000_000L);
-            }
+                conditions.Add("l.time_unix_nano >= @from", "@from", query.StartTime.Value.ToUnixTimeSeconds() * 1_000_000_000L);
             if (query.EndTime.HasValue)
-            {
-                conditions.Add("l.time_unix_nano <= @to");
-                command.Parameters.AddWithValue("@to", query.EndTime.Value.ToUnixTimeSeconds() * 1_000_000_000L);
-            }
+                conditions.Add("l.time_unix_nano <= @to", "@to", query.EndTime.Value.ToUnixTimeSeconds() * 1_000_000_000L);
 
             // Service filter
             if (!string.IsNullOrEmpty(query.ServiceName))
-            {
-                conditions.Add("r.service_name = @service");
-                command.Parameters.AddWithValue("@service", query.ServiceName);
-            }
+                conditions.Add("r.service_name = @service", "@service", query.ServiceName);
 
             // Scope filter
             if (!string.IsNullOrEmpty(query.ScopeName))
-            {
-                conditions.Add("s.scope_name = @scope");
-                command.Parameters.AddWithValue("@scope", query.ScopeName);
-            }
+                conditions.Add("s.scope_name = @scope", "@scope", query.ScopeName);
 
             // Severity filter
             if (query.MinSeverity.HasValue)
-            {
-                conditions.Add("l.severity_number >= @severity");
-                command.Parameters.AddWithValue("@severity", query.MinSeverity.Value);
-            }
+                conditions.Add("l.severity_number >= @severity", "@severity", query.MinSeverity.Value);
 
             // Text filter
             if (!string.IsNullOrEmpty(query.Text))
-            {
-                conditions.Add("l.body LIKE @text");
-                command.Parameters.AddWithValue("@text", $"%{query.Text}%");
-            }
+                conditions.Add("l.body LIKE @text", "@text", $"%{query.Text}%");
 
             // Trace filter
             if (query.TraceId != null)
-            {
-                conditions.Add("l.trace_id = @trace_id");
-                command.Parameters.AddWithValue("@trace_id", query.TraceId.ToByteArray());
-            }
-
-
-            var whereClause = conditions.Count != 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+                conditions.Add("l.trace_id = @trace_id", "@trace_id", query.TraceId.ToByteArray());
 
             command.CommandText = $@"
-                SELECT 
-                    r.id as resource_id, r.service_name, s.id as scope_id, s.scope_name, 
+                SELECT
+                    r.id as resource_id, r.service_name, s.id as scope_id, s.scope_name,
                     l.time_unix_nano, l.observed_time_unix_nano,
                     l.severity_number, l.severity_text, l.body,
                     l.trace_id, l.span_id, r.service_instance_id
                 FROM logs l
                 JOIN resources r ON l.resource_id = r.id
                 JOIN scopes s ON l.scope_id = s.id
-                {whereClause}
+                {conditions.WhereClause}
                 ORDER BY l.time_unix_nano DESC
                 LIMIT @limit OFFSET @offset
             ";
@@ -202,26 +178,18 @@ namespace Signals.Telemetry
         {
             using var connection = CreateConnection();
             using var command = connection.CreateCommand();
-            var conditions = new List<string>();
+            var conditions = new SqlConditions(command);
 
             if (from.HasValue)
-            {
-                conditions.Add("l.time_unix_nano >= @from");
-                command.Parameters.AddWithValue("@from", from.Value.ToUnixTimeSeconds() * 1_000_000_000L);
-            }
+                conditions.Add("l.time_unix_nano >= @from", "@from", from.Value.ToUnixTimeSeconds() * 1_000_000_000L);
             if (to.HasValue)
-            {
-                conditions.Add("l.time_unix_nano <= @to");
-                command.Parameters.AddWithValue("@to", to.Value.ToUnixTimeSeconds() * 1_000_000_000L);
-            }
-
-            var whereClause = conditions.Any() ? "WHERE " + string.Join(" AND ", conditions) : "";
+                conditions.Add("l.time_unix_nano <= @to", "@to", to.Value.ToUnixTimeSeconds() * 1_000_000_000L);
 
             command.CommandText = $@"
             SELECT r.service_name, COUNT(*) as count
             FROM logs l
             JOIN resources r ON l.resource_id = r.id
-            {whereClause}
+            {conditions.WhereClause}
             GROUP BY r.service_name
             ORDER BY count DESC
         ";
@@ -265,28 +233,6 @@ namespace Signals.Telemetry
             command.Parameters.AddWithValue("@span_id", spanId.ToByteArray());
 
             return (long)command.ExecuteScalar()!;
-        }
-
-        public List<string> GetUniqueLogScopes()
-        {
-            using var connection = CreateConnection();
-            using var command = connection.CreateCommand();
-
-            command.CommandText = @"
-            SELECT DISTINCT s.scope_name 
-            FROM logs l
-            JOIN scopes s ON l.scope_id = s.id
-            ORDER BY s.scope_name
-        ";
-
-            var scopes = new List<string>();
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                scopes.Add(reader.GetString(0));
-            }
-
-            return scopes;
         }
 
     }

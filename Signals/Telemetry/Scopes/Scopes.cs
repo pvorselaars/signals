@@ -30,21 +30,28 @@ public sealed partial class Repository
         return (long)command.ExecuteScalar()!;
     }
 
-    public List<InstrumentationScope> GetUniqueScopes()
+    // With no table, returns every known scope name. Given a table name (e.g.
+    // "spans" or "logs"), returns only scope names actually used by rows in
+    // that table - both call sites just need the JOIN's target table name,
+    // which is always a hardcoded literal from our own code, never user input.
+    public List<string> GetUniqueScopes(string? table = null)
     {
         using var connection = CreateConnection();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT DISTINCT scope_name FROM scopes";
+        command.CommandText = table is null
+            ? "SELECT DISTINCT scope_name FROM scopes ORDER BY scope_name"
+            : $@"
+                SELECT DISTINCT s.scope_name
+                FROM {table} t
+                JOIN scopes s ON t.scope_id = s.id
+                ORDER BY s.scope_name
+            ";
         using var reader = command.ExecuteReader();
 
-        var scopes = new List<InstrumentationScope>();
+        var scopes = new List<string>();
         while (reader.Read())
         {
-            scopes.Add(new InstrumentationScope
-            {
-                Name = reader.GetString(0)
-            });
-
+            scopes.Add(reader.GetString(0));
         }
         return scopes;
     }

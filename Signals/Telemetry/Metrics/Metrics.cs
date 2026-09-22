@@ -55,37 +55,23 @@ namespace Signals.Telemetry
 
         public List<Metric> QueryMetrics(Query query)
         {
-            var conditions = new List<string>();
             using var connection = CreateConnection();
             using var command = connection.CreateCommand();
+            var conditions = new SqlConditions(command);
 
             // Metric name filter
             if (!string.IsNullOrEmpty(query.MetricName))
-            {
-                conditions.Add("m.metric_name = @metric_name");
-                command.Parameters.AddWithValue("@metric_name", query.MetricName);
-            }
+                conditions.Add("m.metric_name = @metric_name", "@metric_name", query.MetricName);
 
             // Text filter
             if (!string.IsNullOrEmpty(query.Text))
-            {
-                conditions.Add("m.metric_name LIKE @text");
-                command.Parameters.AddWithValue("@text", $"%{query.Text}%");
-            }
+                conditions.Add("m.metric_name LIKE @text", "@text", $"%{query.Text}%");
 
             // Time filters
             if (query.StartTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano >= @start_time");
-                command.Parameters.AddWithValue("@start_time", query.StartTime.Value.ToUnixTimeNanoseconds());
-            }
+                conditions.Add("dp.time_unix_nano >= @start_time", "@start_time", query.StartTime.Value.ToUnixTimeNanoseconds());
             if (query.EndTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano <= @end_time");
-                command.Parameters.AddWithValue("@end_time", query.EndTime.Value.ToUnixTimeNanoseconds());
-            }
-
-            var whereClause = conditions.Count != 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+                conditions.Add("dp.time_unix_nano <= @end_time", "@end_time", query.EndTime.Value.ToUnixTimeNanoseconds());
 
             command.CommandText = $@"
                 SELECT
@@ -101,7 +87,7 @@ namespace Signals.Telemetry
                 LEFT JOIN resources AS r ON r.id = dp.resource_id
                 JOIN metrics   AS m ON m.id = dp.metric_id
                 JOIN scopes    AS s ON s.id = dp.scope_id
-                {whereClause}
+                {conditions.WhereClause}
                 GROUP BY dp.resource_id, dp.metric_id, dp.scope_id
                 ORDER BY m.metric_name DESC
                 LIMIT @limit OFFSET @offset
@@ -135,39 +121,27 @@ namespace Signals.Telemetry
 
         private void GetDataPoints(Metric metric, long metricId, Query query)
         {
-            var conditions = new List<string>();
             using var connection = CreateConnection();
             using var command = connection.CreateCommand();
+            var conditions = new SqlConditions(command);
 
             if (query.StartTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano >= @start_time");
-                command.Parameters.AddWithValue("@start_time", query.StartTime.Value.ToUnixTimeMilliseconds() * 1_000_000);
-            }
+                conditions.Add("dp.time_unix_nano >= @start_time", "@start_time", query.StartTime.Value.ToUnixTimeMilliseconds() * 1_000_000);
 
             if (query.EndTime.HasValue)
-            {
-                conditions.Add("dp.time_unix_nano <= @end_time");
-                command.Parameters.AddWithValue("@end_time", query.EndTime.Value.ToUnixTimeMilliseconds() * 1_000_000);
-            }
+                conditions.Add("dp.time_unix_nano <= @end_time", "@end_time", query.EndTime.Value.ToUnixTimeMilliseconds() * 1_000_000);
 
             if (query.ServiceName != null)
-            {
-                conditions.Add("r.service_name = @service_name");
-                command.Parameters.AddWithValue("@service_name", query.ServiceName);
-            }
+                conditions.Add("r.service_name = @service_name", "@service_name", query.ServiceName);
 
-            conditions.Add("dp.metric_id = @metric_id");
-            command.Parameters.AddWithValue("@metric_id", metricId);
-
-            var whereClause = conditions.Count != 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+            conditions.Add("dp.metric_id = @metric_id", "@metric_id", metricId);
 
             command.CommandText = $@"
-            SELECT 
+            SELECT
                 r.service_name, dp.time_unix_nano, dp.value_double, dp.value_int, dp.count, dp.sum_value, dp.min_value, dp.max_value
             FROM data_points dp
             JOIN resources r ON dp.resource_id = r.id
-            {whereClause}
+            {conditions.WhereClause}
             ORDER BY r.service_name DESC, dp.time_unix_nano DESC
         ";
 

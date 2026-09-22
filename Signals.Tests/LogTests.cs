@@ -105,7 +105,7 @@ public class LogTests
         _repository.InsertLogs(CreateTestResourceLogs());
 
         // Act
-        var scopes = _repository.GetUniqueLogScopes();
+        var scopes = _repository.GetUniqueScopes("logs");
 
         // Assert
         Assert.HasCount(1, scopes);
