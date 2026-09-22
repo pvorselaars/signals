@@ -1,4 +1,5 @@
 using Google.Protobuf;
+using Microsoft.Data.Sqlite;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Logs.V1;
 
@@ -45,20 +46,23 @@ namespace OpenTelemetry.Proto.Logs.V1
 
 namespace Signals.Telemetry
 {
-    public sealed partial class Repository : IDisposable
+    public sealed partial class Repository
     {
 
         public void InsertLogs(IEnumerable<ResourceLogs> resourceLogs)
         {
-            using var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var transaction = connection.BeginTransaction();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
 
             foreach (var resourceLog in resourceLogs)
             {
-                var resourceId = GetOrCreateResource(resourceLog.Resource);
+                var resourceId = GetOrCreateResource(transaction, resourceLog.Resource);
 
                 foreach (var scopeLog in resourceLog.ScopeLogs)
                 {
-                    var scopeId = GetOrCreateScope(scopeLog.Scope);
+                    var scopeId = GetOrCreateScope(transaction, scopeLog.Scope);
 
                     command.CommandText = @"
                         INSERT INTO logs (
@@ -88,6 +92,8 @@ namespace Signals.Telemetry
                     }
                 }
             }
+
+            transaction.Commit();
         }
 
         public List<LogRecord> QueryLogs() => QueryLogs(new Query());
@@ -96,7 +102,8 @@ namespace Signals.Telemetry
         {
 
             var conditions = new List<string>();
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
 
             // Time range
             if (query.StartTime.HasValue)
@@ -193,7 +200,8 @@ namespace Signals.Telemetry
 
         public Dictionary<string, long> GetLogCountByService(DateTimeOffset? from, DateTimeOffset? to)
         {
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
             var conditions = new List<string>();
 
             if (from.HasValue)
@@ -231,7 +239,8 @@ namespace Signals.Telemetry
 
         public long GetLogCountForTrace(ByteString traceId)
         {
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
             command.CommandText = @"
             SELECT COUNT(*) 
             FROM logs l
@@ -245,7 +254,8 @@ namespace Signals.Telemetry
 
         public long GetLogCountForSpan(ByteString spanId)
         {
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
             command.CommandText = @"
             SELECT COUNT(*) 
             FROM logs l
@@ -259,7 +269,8 @@ namespace Signals.Telemetry
 
         public List<string> GetUniqueLogScopes()
         {
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
 
             command.CommandText = @"
             SELECT DISTINCT s.scope_name 

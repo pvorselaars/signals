@@ -6,28 +6,61 @@ namespace Signals.Telemetry;
 
 public sealed partial class Repository : IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly string _connectionString;
+
+    // SQLite destroys an in-memory database as soon as its last connection
+    // closes, which breaks the open-a-connection-per-operation pattern below.
+    // For ":memory:" callers (the test suite), give this Repository instance
+    // its own named shared-cache in-memory database and hold one connection
+    // open for the Repository's lifetime to keep that database alive.
+    private readonly SqliteConnection? _memoryKeepAlive;
 
     public Repository(string connectionString)
     {
-        _connection = new SqliteConnection(connectionString);
-        _connection.Open();
+        if (new SqliteConnectionStringBuilder(connectionString).DataSource.Equals(":memory:", StringComparison.OrdinalIgnoreCase))
+        {
+            _connectionString = $"Data Source=signals-{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
+            _memoryKeepAlive = new SqliteConnection(_connectionString);
+            _memoryKeepAlive.Open();
+        }
+        else
+        {
+            _connectionString = connectionString;
+        }
 
-        ExecuteNonQuery("PRAGMA journal_mode = WAL");
-        ExecuteNonQuery("PRAGMA synchronous = NORMAL");
-        ExecuteNonQuery("PRAGMA cache_size = 10000");
-        ExecuteNonQuery("PRAGMA temp_store = MEMORY");
-
-        CreateSchema();
+        using var connection = CreateConnection();
+        CreateSchema(connection);
     }
 
     public Repository() : this("Data Source=signals.db")
     {
     }
 
-    private void CreateSchema()
+    public void Dispose() => _memoryKeepAlive?.Dispose();
+
+    private SqliteConnection CreateConnection()
     {
-        ExecuteNonQuery(@"
+        var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+
+        using (var pragmas = connection.CreateCommand())
+        {
+            pragmas.CommandText = @"
+                PRAGMA journal_mode = WAL;
+                PRAGMA synchronous = NORMAL;
+                PRAGMA cache_size = 10000;
+                PRAGMA temp_store = MEMORY;
+            ";
+            pragmas.ExecuteNonQuery();
+        }
+
+        return connection;
+    }
+
+    private static void CreateSchema(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = @"
             CREATE TABLE IF NOT EXISTS resources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 service_name TEXT NOT NULL,
@@ -98,7 +131,8 @@ public sealed partial class Repository : IDisposable
                 FOREIGN KEY(metric_id) REFERENCES metrics(id) ON DELETE CASCADE,
                 FOREIGN KEY(scope_id) REFERENCES scopes(id) ON DELETE CASCADE
             );
-        ");
+        ";
+        command.ExecuteNonQuery();
     }
 
     public class Query
@@ -137,13 +171,4 @@ public sealed partial class Repository : IDisposable
         private ByteString? _traceId;
         public ByteString? TraceId { get => _traceId; set { if (_traceId != value) { _traceId = value; NotifyStateChanged(); } } }
     }
-
-    private void ExecuteNonQuery(string sql)
-    {
-        using var command = _connection.CreateCommand();
-        command.CommandText = sql;
-        command.ExecuteNonQuery();
-    }
-
-    public void Dispose() => _connection?.Dispose();
 }

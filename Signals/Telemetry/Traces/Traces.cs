@@ -1,4 +1,5 @@
 using Google.Protobuf;
+using Microsoft.Data.Sqlite;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Trace.V1;
 using Signals.Common.Utilities;
@@ -34,20 +35,23 @@ namespace OpenTelemetry.Proto.Trace.V1
 
 namespace Signals.Telemetry
 {
-    public sealed partial class Repository : IDisposable
+    public sealed partial class Repository
     {
 
         public void InsertTraces(IEnumerable<ResourceSpans> resourceSpans)
         {
-            using var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var transaction = connection.BeginTransaction();
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
 
             foreach (var resourceSpan in resourceSpans)
             {
-                var resourceId = GetOrCreateResource(resourceSpan.Resource);
+                var resourceId = GetOrCreateResource(transaction, resourceSpan.Resource);
 
                 foreach (var scopeSpan in resourceSpan.ScopeSpans)
                 {
-                    var scopeId = GetOrCreateScope(scopeSpan.Scope);
+                    var scopeId = GetOrCreateScope(transaction, scopeSpan.Scope);
 
                     command.CommandText = @"
                         INSERT INTO spans (
@@ -78,6 +82,8 @@ namespace Signals.Telemetry
                     }
                 }
             }
+
+            transaction.Commit();
         }
 
         public List<Span> QuerySpans() => QuerySpans(new Query());
@@ -85,7 +91,8 @@ namespace Signals.Telemetry
         public List<Span> QuerySpans(Query query)
         {
             var conditions = new List<string>();
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
 
             // Time range
             if (query.StartTime.HasValue)
@@ -178,7 +185,8 @@ namespace Signals.Telemetry
 
         public List<string> GetUniqueTraceScopes()
         {
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
             command.CommandText = @"
             SELECT DISTINCT s.scope_name
             FROM spans 

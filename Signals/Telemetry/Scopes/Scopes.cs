@@ -1,12 +1,14 @@
+using Microsoft.Data.Sqlite;
 using OpenTelemetry.Proto.Common.V1;
 
 namespace Signals.Telemetry;
 
-public sealed partial class Repository : IDisposable
+public sealed partial class Repository
 {
-    private long GetOrCreateScope(InstrumentationScope scope)
+    private static long GetOrCreateScope(SqliteTransaction transaction, InstrumentationScope scope)
     {
-        var command = _connection.CreateCommand();
+        using var command = transaction.Connection!.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = @"
             SELECT id FROM scopes 
             WHERE scope_name = @scope_name
@@ -30,9 +32,10 @@ public sealed partial class Repository : IDisposable
 
     public List<InstrumentationScope> GetUniqueScopes()
     {
-        var command = _connection.CreateCommand();
+        using var connection = CreateConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "SELECT DISTINCT scope_name FROM scopes";
-        var reader = command.ExecuteReader();
+        using var reader = command.ExecuteReader();
 
         var scopes = new List<InstrumentationScope>();
         while (reader.Read())
