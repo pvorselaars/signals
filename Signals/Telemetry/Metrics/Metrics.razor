@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @implements IDisposable
 @using OpenTelemetry.Metrics
+@using Signals.Telemetry
 @using Signals.Telemetry.Metrics
 @using static Signals.Telemetry.Repository
 
@@ -10,27 +11,7 @@
 
 <PageTitle>Metrics</PageTitle>
 
-<fieldset>
-    <input type="search" placeholder="Search metrics..." @bind="query.Text" @bind:event="oninput" />
-    <select id="scope" title="Scope" @bind="query.ScopeName">
-        <option value="">Any scope</option>
-        @foreach (var scope in repo.GetUniqueScopes())
-        {
-            <option value="@scope">@scope</option>
-        }
-    </select>
-    <select id="resource" title="Resource" @bind="query.ServiceName">
-        <option value="">Any service</option>
-        @foreach (var service in repo.GetUniqueServices())
-        {
-            <option value="@service">@service
-            </option>
-        }
-
-    </select>
-    <input type="datetime-local" title="Start Time" @bind="query.StartTime" />
-    <input type="datetime-local" title="End Time" @bind="query.EndTime" />
-</fieldset>
+<TelemetryFilters SearchPlaceholder="Search metrics..." />
 <table>
     <thead>
         <tr>
