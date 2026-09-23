@@ -1,9 +1,10 @@
 using Google.Protobuf;
+using Microsoft.Data.Sqlite;
 using OpenTelemetry.Proto.Resource.V1;
 
 namespace Signals.Telemetry;
 
-public sealed partial class Repository : IDisposable
+public sealed partial class Repository
 {
     private static string? GetResourceAttribute(Resource resource, string key)
     {
@@ -12,14 +13,15 @@ public sealed partial class Repository : IDisposable
             ?.Value?.StringValue;
     }
 
-    private long GetOrCreateResource(Resource resource)
+    private static long GetOrCreateResource(SqliteTransaction transaction, Resource resource)
     {
         var serviceName = GetResourceAttribute(resource, "service.name") ?? "unknown";
         var serviceVersion = GetResourceAttribute(resource, "service.version");
         var serviceInstanceId = GetResourceAttribute(resource, "service.instance.id");
         var json = JsonFormatter.Default.Format(resource);
 
-        using var command = _connection.CreateCommand();
+        using var command = transaction.Connection!.CreateCommand();
+        command.Transaction = transaction;
 
         // Try to find existing resource
         command.CommandText = @"
@@ -57,7 +59,8 @@ public sealed partial class Repository : IDisposable
     
     public List<string> GetUniqueServices()
     {
-        var command = _connection.CreateCommand();
+        using var connection = CreateConnection();
+        using var command = connection.CreateCommand();
         command.CommandText = "SELECT DISTINCT service_name FROM resources ORDER BY service_name";
 
         var services = new List<string>();

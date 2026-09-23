@@ -23,26 +23,31 @@ namespace OpenTelemetry.Proto.Metrics.V1
 
 namespace Signals.Telemetry
 {
-    public sealed partial class Repository : IDisposable
+    public sealed partial class Repository
     {
 
         public void InsertMetrics(IEnumerable<ResourceMetrics> resourceMetrics)
         {
+            using var connection = CreateConnection();
+            using var transaction = connection.BeginTransaction();
+
             foreach (var resourceMetric in resourceMetrics)
             {
-                var resourceId = GetOrCreateResource(resourceMetric.Resource);
+                var resourceId = GetOrCreateResource(transaction, resourceMetric.Resource);
 
                 foreach (var scopeMetric in resourceMetric.ScopeMetrics)
                 {
-                    var scopeId = GetOrCreateScope(scopeMetric.Scope);
+                    var scopeId = GetOrCreateScope(transaction, scopeMetric.Scope);
 
                     foreach (var metric in scopeMetric.Metrics)
                     {
-                        var metricId = GetOrCreateMetric(metric.Name, (int)metric.DataCase, metric.Unit, metric.Description);
-                        InsertMetricDataPoints(resourceId, metricId, scopeId, metric);
+                        var metricId = GetOrCreateMetric(transaction, metric.Name, (int)metric.DataCase, metric.Unit, metric.Description);
+                        InsertMetricDataPoints(transaction, resourceId, metricId, scopeId, metric);
                     }
                 }
             }
+
+            transaction.Commit();
         }
 
 
@@ -51,7 +56,8 @@ namespace Signals.Telemetry
         public List<Metric> QueryMetrics(Query query)
         {
             var conditions = new List<string>();
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
 
             // Metric name filter
             if (!string.IsNullOrEmpty(query.MetricName))
@@ -130,7 +136,8 @@ namespace Signals.Telemetry
         private void GetDataPoints(Metric metric, long metricId, Query query)
         {
             var conditions = new List<string>();
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
 
             if (query.StartTime.HasValue)
             {
@@ -212,9 +219,10 @@ namespace Signals.Telemetry
 
         }
 
-        private void InsertMetricDataPoints(long resourceId, long metricId, long scopeId, Metric metric)
+        private static void InsertMetricDataPoints(SqliteTransaction transaction, long resourceId, long metricId, long scopeId, Metric metric)
         {
-            var command = _connection.CreateCommand();
+            using var command = transaction.Connection!.CreateCommand();
+            command.Transaction = transaction;
 
             var dataPoints = new List<(long timeUnixNano, double? valueDouble, long? valueInt, long? count, double? sumValue, double? minValue, double? maxValue)>();
 
@@ -292,9 +300,10 @@ namespace Signals.Telemetry
             };
         }
 
-        private long GetOrCreateMetric(string metricName, int metricType, string? metricUnit, string? metricDescription)
+        private static long GetOrCreateMetric(SqliteTransaction transaction, string metricName, int metricType, string? metricUnit, string? metricDescription)
         {
-            using var command = _connection.CreateCommand();
+            using var command = transaction.Connection!.CreateCommand();
+            command.Transaction = transaction;
 
             command.CommandText = @"
             SELECT id FROM metrics 
@@ -328,7 +337,8 @@ namespace Signals.Telemetry
 
         public List<MetricRecord> GetMetricsForTrace(Span span)
         {
-            var command = _connection.CreateCommand();
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
 
             // Get metrics from the same resource during the span's execution time
             command.CommandText = @"
