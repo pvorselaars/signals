@@ -15,7 +15,7 @@
     <input type="search" placeholder="Search traces..." @bind="query.Text" @bind:event="oninput" />
     <select id="scope" title="Scope" @bind="query.ScopeName">
         <option value="">Any scope</option>
-        @foreach (var scope in repo.GetUniqueTraceScopes())
+        @foreach (var scope in repo.GetUniqueScopes("spans"))
         {
             <option value="@scope">@scope</option>
         }

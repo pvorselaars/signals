@@ -13,7 +13,7 @@
     <input type="search" placeholder="Search logs..." @bind="query.Text" @bind:event="oninput" />
     <select id="scope" title="Scope" @bind="query.ScopeName">
         <option value="">Any scope</option>
-        @foreach (var scope in repo.GetUniqueLogScopes())
+        @foreach (var scope in repo.GetUniqueScopes("logs"))
         {
             <option value="@scope">@scope</option>
         }
