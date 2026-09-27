@@ -56,7 +56,7 @@
                     <td colspan="5" style="text-align: center; font-style: italic;">No logs found</td>
                 </tr>
             }
-            @foreach (var log in repo.QueryLogs(query))
+            @foreach (var log in logs)
             {
                 <tr>
                     @if (string.IsNullOrEmpty(query.ServiceName))
