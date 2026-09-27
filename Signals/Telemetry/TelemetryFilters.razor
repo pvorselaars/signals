@@ -1,0 +1,49 @@
+@implements IDisposable
+@using static Signals.Telemetry.Repository
+
+@inject Repository repo
+@inject Query query
+
+<fieldset>
+    <input type="search" placeholder="@SearchPlaceholder" @bind="query.Text" @bind:event="oninput" />
+    <select id="scope" title="Scope" @bind="query.ScopeName">
+        <option value="">Any scope</option>
+        @foreach (var scope in repo.GetUniqueScopes(ScopeTable))
+        {
+            <option value="@scope">@scope</option>
+        }
+    </select>
+    <select id="resource" title="Resource" @bind="query.ServiceName">
+        <option value="">Any service</option>
+        @foreach (var service in repo.GetUniqueServices())
+        {
+            <option value="@service">@service
+            </option>
+        }
+
+    </select>
+    <input type="datetime-local" title="Start Time" @bind="query.StartTime" />
+    <input type="datetime-local" title="End Time" @bind="query.EndTime" />
+</fieldset>
+
+@code {
+
+    [Parameter, EditorRequired]
+    public string SearchPlaceholder { get; set; } = "";
+
+    // The scope dropdown shows every scope name known to this table's rows
+    // (e.g. "spans" or "logs"), or every scope name in the system if null.
+    [Parameter]
+    public string? ScopeTable { get; set; }
+
+    protected override void OnInitialized()
+    {
+        query.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        query.OnChange -= StateHasChanged;
+    }
+
+}
